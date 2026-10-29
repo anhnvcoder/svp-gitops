@@ -1,0 +1,98 @@
+# Check of every pull request and of every push to main of this repository: deploy/ci/gitops-check.sh of the code
+# repository (https://github.com/anhnvcoder/short-video-platform), at the commit CHECKER_COMMIT below, on this tree. The
+# logic is that script's alone, so it runs the same on a machine against a clone; a pull request here cannot change
+# what checks it except by changing this file, which has a code owner. Job gitops-ok is the only check the ruleset of
+# main requires, so the jobs before it can be renamed or added without touching the ruleset.
+#
+# The repository is public and a pull request from a fork runs this workflow with the fork's tree, so:
+# - no pull_request_target and no workflow_run: a pull request never runs with a write token or with secrets;
+# - the job reads only: contents (both checkouts) and deployments (the stg deployment records a pull request to
+#   envs/prd/ is compared with);
+# - every action is GitHub's own and pinned to a full commit SHA: a tag moved to other code changes nothing here;
+# - checkout never leaves the token in .git/config (persist-credentials: false);
+# - values an outsider controls (branch names, titles) never go into a script through ${{ }}: only through env.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Run by hand on any branch. No paths filter on any trigger: a required check whose workflow does not run is never
+  # reported and leaves the pull request waiting.
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: check-${{ github.ref }}
+  # A new push to a pull request makes its previous run useless; on main a running run is never cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
+  # by a pull request here (Renovate proposes the newest).
+  # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/short-video-platform branch=main
+  CHECKER_COMMIT: c59c7426663d6ee0818c707417136e7b05311fd0
+
+jobs:
+  # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
+  # environment pins, checks the rules of the tree, the digests of every third-party image, and the signature,
+  # attestations and provenance of every release image that changed.
+  gitops:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      deployments: read
+    steps:
+      # The whole history of both: the base commit below, the revisions of envs/*/charts.yaml and the commits of the
+      # image tags are read from it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: gitops
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: anhnvcoder/short-video-platform
+          ref: ${{ env.CHECKER_COMMIT }}
+          path: code
+          fetch-depth: 0
+          persist-credentials: false
+      - name: The commit of the checker
+        run: git -C code log -1 --format='code repository at %H (%s)'
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: code/go.mod
+          cache-dependency-path: code/go.sum
+      # Helm at the version and checksum the code repository pins (buf comes with it, unused here).
+      - run: make -C code ci-tools
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      # Base of the comparison: a pull request, the merge base with its base branch; a push to main, main as it was
+      # before the push (all zeros when the branch did not exist: every image file is checked); a manual run, every
+      # image file.
+      - name: gitops-check.sh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request) base=$(git -C gitops merge-base HEAD "origin/$GITHUB_BASE_REF") ;;
+            push) base=${BEFORE//0/} && base=${base:+$BEFORE} ;;
+            *) base= ;;
+          esac
+          echo "base: ${base:-none, every image file}"
+          code/deploy/ci/gitops-check.sh gitops "$base"
+
+  gitops-ok:
+    needs: [gitops]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Every check job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          jq -e 'length == 1 and all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null

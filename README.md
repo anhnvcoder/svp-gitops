@@ -25,7 +25,7 @@ argocd/
   bootstrap.json            chart Argo CD: repo, chart, version, values (base/argo-cd.yaml)
   apps/                     chart app-of-apps; components.json là danh sách component
 .github/workflows/check.yml check của mỗi pull request và push main, check tổng gitops-ok
-.github/rulesets/           ruleset main và owners (nhập bằng tay, xem dưới)
+.github/rulesets/           ruleset main, owners và tags (nhập bằng tay, xem dưới)
 CODEOWNERS, renovate.json
 ```
 
@@ -42,9 +42,13 @@ thiếu một trong 7 file `images/`, file `images/` có khoá ngoài `image`. `
   Renovate mở cần người học duyệt; PR của chính người học merge bằng bypass của ruleset `owners` (có bản ghi bypass), check của ruleset
   `main` vẫn bắt buộc.
 - Ruleset `main`: cấm xoá và force push nhánh mặc định, mọi thay đổi qua PR, check bắt buộc `gitops-ok` của app GitHub Actions, không
-  ai bypass. Ruleset `owners`: PR đổi file có chủ phải được Code Owner duyệt; vai admin bypass ở chế độ `pull_request`. Hai file ở
-  `.github/rulesets/` là bản để nhập (`gh api -X POST repos/anhnvcoder/svp-gitops/rulesets --input .github/rulesets/main.json`), không có
-  hiệu lực khi chỉ nằm trong repo; `actor_id` 5 của `owners.json` là vai admin của repo, kiểm lại sau khi nhập.
+  ai bypass. Ruleset `owners`: PR đổi file có chủ phải được Code Owner duyệt; vai admin bypass ở chế độ `pull_request`.
+- Ruleset `tags`: mọi tag (`~ALL`) cấm tạo, sửa, xoá, chỉ vai admin bypass (chế độ `always`, chế độ `pull_request` chỉ áp cho ruleset
+  nhánh). Repo này không dùng tag; Argo CD phân giải `targetRevision` tên ngắn bằng ref đầu tiên trùng tên, cả tag, nên tag `main` do token
+  của App (`contents: write`) bị lộ tạo ra có thể thành bản được deploy.
+- Ba file ở `.github/rulesets/` là bản để nhập (`gh api -X POST repos/anhnvcoder/svp-gitops/rulesets --input .github/rulesets/main.json`),
+  không có hiệu lực khi chỉ nằm trong repo; `actor_id` 5 của `owners.json` và `tags.json` là vai admin của repo, kiểm lại sau khi nhập.
+  Schema: [REST API ruleset của repository](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset).
 
 ## Promote
 
