@@ -1,0 +1,11 @@
+# The commit of the code repository (https://github.com/anhnvcoder/short-video-platform) whose charts, deploy/helm/*
+# there, this environment runs: every Application of a chart of that repository reads it at this commit. A change of
+# a chart reaches stg only through this file, together with the images it was built for.
+revision: 0fddd82a9848fdc6b4864b55f81b59e2beee5855
+# Derived from that commit; written with it, and the check of this repository computes both again from it.
+# podSecurityVersion of deploy/helm/svp-cluster/values.yaml: the Pod Security Standard version of the namespaces of
+# wave 0, which come before chart svp-cluster labels the others.
+podSecurityVersion: v1.36
+# sha256 of deploy/observability/otelcol/k8s-config.yaml: an annotation of the Collector's pod template, so a changed
+# config rolls the pod and an unchanged one does not.
+collectorConfigSha256: 4c8b443f8b4522e5da0740baf16db0bb4def8195f10377593cb5897367dcdd4b

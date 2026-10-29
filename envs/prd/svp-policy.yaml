@@ -1,0 +1,4 @@
+# Production checks the build provenance of every release image as well as its signature and vulnerability report,
+# as staging does: prd only runs a set of images that ran together in stg.
+imageVerification:
+  requireProvenance: true

@@ -1,0 +1,7 @@
+# The release image of feed-service in prd, nothing else: the release on GHCR that CI of the code repository built,
+# scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
+# digest. Its configuration is base/services/feed-service.yaml and envs/prd/feed-service.yaml when there is one.
+image:
+  repository: ghcr.io/anhnvcoder/short-video-platform/feed-service
+  tag: "6ca2d8a795dd"
+  digest: "sha256:c53dad24ad28b7e512d4d79f8889ad4df5ee215e9e86ace0b87a87b0d1df6e1a"

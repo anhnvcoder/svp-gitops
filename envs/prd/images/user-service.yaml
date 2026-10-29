@@ -1,0 +1,7 @@
+# The release image of user-service in prd, nothing else: the release on GHCR that CI of the code repository built,
+# scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
+# digest. Its configuration is base/services/user-service.yaml and envs/prd/user-service.yaml when there is one.
+image:
+  repository: ghcr.io/anhnvcoder/short-video-platform/user-service
+  tag: "6ca2d8a795dd"
+  digest: "sha256:a741f57530c58642c8e5a0d694def54f05233038324af9bb035470216364291a"

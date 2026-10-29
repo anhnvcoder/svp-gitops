@@ -1,0 +1,7 @@
+# The release image of video-service in stg, nothing else: the release on GHCR that CI of the code repository built,
+# scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
+# digest. Its configuration is base/services/video-service.yaml and envs/stg/video-service.yaml when there is one.
+image:
+  repository: ghcr.io/anhnvcoder/short-video-platform/video-service
+  tag: "6ca2d8a795dd"
+  digest: "sha256:246b8ddab153d85a6dff67167e69e1de685da8d488c6455c026ec52915ba4383"

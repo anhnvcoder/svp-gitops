@@ -1,0 +1,4 @@
+# Staging checks the build provenance of every release image as well as its signature and vulnerability report: each
+# of the seven releases in envs/stg/images/ carries one, attested by CI of the code repository on main.
+imageVerification:
+  requireProvenance: true

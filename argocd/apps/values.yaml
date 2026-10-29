@@ -1,0 +1,24 @@
+# Root of the GitOps path. Every values file an Application reads (base/, envs/<env>/, envs/<env>/images/) comes from
+# this repository at this revision, through a source with ref "values"; the charts of the code repository come from
+# chartRepoURL at the commit envs/<env>/charts.yaml pins, upstream charts from the repositories components.json pins.
+# Root Application svp-root (deploy/k8s/gitops.sh of the code repository) sets targetRevision to the revision it follows
+# itself, the one whose release images the bootstrap has checked.
+# Both repositories are public and Argo CD reads them over HTTPS without credentials: no repository Secret, no key
+# anywhere. Both URLs are in sourceRepos of AppProject svp (argocd/project.yaml).
+repoURL: https://github.com/anhnvcoder/svp-gitops.git
+targetRevision: main
+# The code repository, which holds the charts deploy/helm/* (path of a component in components.json).
+chartRepoURL: https://github.com/anhnvcoder/short-video-platform.git
+# AppProject that limits the sources, destinations and cluster-scoped kinds of every Application.
+project: svp
+# The architecture of the cluster's nodes, amd64 or arm64: a component of components.json with archValues gets the
+# values file named there for it on top of its values (Argo Rollouts' traffic router plugin is a native binary, one
+# per architecture). The bootstrap sets it from the nodes it created; arm64, the nodes of a Mac, otherwise.
+nodeArch: arm64
+# The environment this cluster runs, the name of a directory of envs/ (files/envs is a symlink to it): its
+# charts.yaml pins the charts of the code repository, its images/ holds the image of every release of chart
+# svp-service, and an Application whose component has a file <name>.yaml there reads it after its other values
+# files. Required, no default: a cluster that forgot it would otherwise run another environment's settings without a
+# word. The bootstrap sets stg, the only environment a lab cluster runs; prd is rendered by the check only. The dev path
+# does not use this chart and reads base/ alone.
+env: ""

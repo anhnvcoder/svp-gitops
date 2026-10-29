@@ -1,0 +1,8 @@
+{
+  "name": "argocd",
+  "namespace": "argocd",
+  "repo": "https://argoproj.github.io/argo-helm",
+  "chart": "argo-cd",
+  "version": "10.10.5",
+  "values": "base/argo-cd.yaml"
+}

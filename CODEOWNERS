@@ -1,0 +1,7 @@
+# Every file has an owner, who must approve a pull request that changes it (ruleset owners), except envs/stg/: the
+# overlays, charts.yaml and images/ of staging, which the promote pull request of the bot changes and merges once the
+# check passes. The last matching line wins, and a line with no owner leaves its paths without one. The provenance switch
+# of staging stays owned: no bot pull request may turn it off.
+*           @anhnvcoder
+/envs/stg/
+/envs/stg/svp-policy.yaml @anhnvcoder

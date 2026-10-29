@@ -1,0 +1,404 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Dependency updates of the deployment configuration through the Mend Renovate GitHub App: the upstream charts of argocd/apps/components.json and of argocd/bootstrap.json, the image pins of base/, the actions of .github/workflows/ and the commit of the code repository whose checker the workflow runs.",
+    "Every update is a pull request a code owner reads and merges by hand: no automerge. A release is proposed only once it is 3 days old, because a hijacked release is usually pulled within hours (trivy, March 2026); vulnerability alerts skip that wait and the schedule.",
+    "envs/ is left alone: its images belong to the promote pull requests, its overlays and charts.yaml to people. An update of base/ reaches stg and prd together."
+  ],
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Asia/Ho_Chi_Minh",
+  "schedule": [
+    "* 0-8 * * 6"
+  ],
+  "minimumReleaseAge": "3 days",
+  "dependencyDashboard": true,
+  "automerge": false,
+  "labels": [
+    "dependencies"
+  ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "vulnerabilityAlerts": {
+    "description": "Opened at once, outside the schedule and without minimumReleaseAge. Needs the repository's Dependency graph and Dependabot alerts.",
+    "labels": [
+      "dependencies",
+      "security"
+    ],
+    "semanticCommitType": "fix"
+  },
+  "ignorePaths": [
+    "envs/**"
+  ],
+  "helm-values": {
+    "description": "The values files of the platform charts in base/, which are not named values.yaml. Their image pins are repository + tag: <version>@sha256:<digest>, or an image: string with both. base/services/ has no image: the release images are in envs/<env>/images/.",
+    "managerFilePatterns": [
+      "/^base/[^/]+\\.ya?ml$/"
+    ]
+  },
+  "customManagers": [
+    {
+      "description": "Chart values whose image key does not end in 'image', so helm-values does not see them (KEDA, Tempo): the annotation, then 'tag: <version>@sha256:<digest>'.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^base/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>[a-z-]+)[ \\t]+depName=(?<depName>\\S+)[ \\t]*\\n[ \\t]*tag:[ \\t]*(?<currentValue>[^@\\s\"']+)@(?<currentDigest>sha256:[0-9a-f]{64})[ \\t]*\\n"
+      ]
+    },
+    {
+      "description": "Prometheus and Alertmanager of kube-prometheus-stack: the annotation, 'version: <version>', 'image:', 'tag: <version>@sha256:<digest>'. Unless version is set, the chart writes tag into the object's version field, which the operator parses as a version, so version holds the same version without the digest. Renovate's regex engine (RE2) has no backreferences, so the match cannot require the two to be equal: version and digest are read from tag, the image actually pulled, and the template writes version and tag from the same new version, so every update, a digest-only one included, makes them equal again.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^base/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?<indentation>[ \\t]*)#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>[a-z-]+)[ \\t]+depName=(?<depName>\\S+)[ \\t]*\\n[ \\t]*version:[ \\t]*\\S+[ \\t]*\\n[ \\t]*image:[ \\t]*\\n[ \\t]*tag:[ \\t]*(?<currentValue>[^@\\s\"']+)@(?<currentDigest>sha256:[0-9a-f]{64})[ \\t]*\\n"
+      ],
+      "autoReplaceStringTemplate": "{{{indentation}}}# renovate: datasource={{{datasource}}} depName={{{depName}}}\n{{{indentation}}}version: {{{newValue}}}\n{{{indentation}}}image:\n{{{indentation}}}  tag: {{{newValue}}}@{{{newDigest}}}\n"
+    },
+    {
+      "description": "Charts of the platform components from a Helm repository: repo, chart and version of each entry of components.json and of argocd/bootstrap.json (Argo CD itself, same fields).",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^argocd/apps/components\\.json$/",
+        "/^argocd/bootstrap\\.json$/"
+      ],
+      "matchStrings": [
+        "\"repo\":\\s*\"(?<registryUrl>https://[^\"]+)\",\\s*\"chart\":\\s*\"(?<depName>[^\"]+)\",\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "helm"
+    },
+    {
+      "description": "Charts of the platform components from an OCI registry (repo oci://<registry>/<path>): an OCI artifact, looked up as <registry>/<path>/<chart> on the docker datasource.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^argocd/apps/components\\.json$/",
+        "/^argocd/bootstrap\\.json$/"
+      ],
+      "matchStrings": [
+        "\"repo\":\\s*\"oci://(?<ociRepo>[^\"]+)\",\\s*\"chart\":\\s*\"(?<chart>[^\"]+)\",\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "{{{ociRepo}}}/{{{chart}}}"
+    },
+    {
+      "description": "The commit of the code repository whose deploy/ci/gitops-check.sh the check workflow runs (CHECKER_COMMIT), with a '# renovate: datasource=git-refs depName=<repository> branch=<branch>' line right above: the newest commit of that branch.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)[ \\t]*\\n[ \\t]*[A-Z_]+:[ \\t]*(?<currentDigest>[0-9a-f]{40})[ \\t]*\\n"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "chore(deps) for every update; vulnerabilityAlerts above turns a vulnerability fix into fix(deps).",
+      "matchPackageNames": [
+        "*"
+      ],
+      "semanticCommitType": "chore"
+    },
+    {
+      "description": "Digest-only updates (an image rebuilt under the same tag) not covered by a group below: one weekly pull request.",
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "groupName": "image digests"
+    },
+    {
+      "description": "GitHub Actions, pinned to a full commit SHA with the version in a comment: one pull request for non-major updates. A major gets its own pull request, since a workflow may need changes for it.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Each chart is one pull request together with the image pins of its values file: a chart bump does not move a pin, since a pin overrides the chart's default.",
+      "matchFileNames": [
+        "argocd/apps/components.json",
+        "argocd/bootstrap.json",
+        "base/*.yaml"
+      ],
+      "prBodyNotes": [
+        "A chart or a platform image changed: check it on a cluster before merging: make k8s-up and make k8s-smoke in the code repository with this branch's clone (SVP_GITOPS_DIR)."
+      ]
+    },
+    {
+      "matchFileNames": [
+        "base/cert-manager.yaml"
+      ],
+      "groupName": "cert-manager chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "cert-manager"
+      ],
+      "groupName": "cert-manager chart"
+    },
+    {
+      "matchFileNames": [
+        "base/envoy-gateway.yaml"
+      ],
+      "groupName": "envoy-gateway chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "docker.io/envoyproxy/gateway-helm"
+      ],
+      "groupName": "envoy-gateway chart"
+    },
+    {
+      "matchFileNames": [
+        "base/cloudnative-pg.yaml"
+      ],
+      "groupName": "cloudnative-pg chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "cloudnative-pg"
+      ],
+      "groupName": "cloudnative-pg chart"
+    },
+    {
+      "matchFileNames": [
+        "base/plugin-barman-cloud.yaml"
+      ],
+      "groupName": "plugin-barman-cloud chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "plugin-barman-cloud"
+      ],
+      "groupName": "plugin-barman-cloud chart"
+    },
+    {
+      "matchFileNames": [
+        "base/keda.yaml"
+      ],
+      "groupName": "keda chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "keda"
+      ],
+      "groupName": "keda chart"
+    },
+    {
+      "matchFileNames": [
+        "base/argo-rollouts.yaml"
+      ],
+      "groupName": "argo-rollouts chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "argo-rollouts"
+      ],
+      "groupName": "argo-rollouts chart"
+    },
+    {
+      "matchFileNames": [
+        "base/kyverno.yaml"
+      ],
+      "groupName": "kyverno chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "kyverno"
+      ],
+      "groupName": "kyverno chart"
+    },
+    {
+      "matchFileNames": [
+        "base/external-secrets.yaml"
+      ],
+      "groupName": "external-secrets chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "external-secrets"
+      ],
+      "groupName": "external-secrets chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json",
+        "base/kyverno.yaml"
+      ],
+      "matchDepNames": [
+        "kyverno",
+        "ghcr.io/kyverno/**"
+      ],
+      "prBodyNotes": [
+        "Kyverno changed: run make drill-k8s-supplychain in the code repository before merging. Policy svp-images is an ImageValidatingPolicy, and the health check of Argo CD (base/argo-cd.yaml) reads its status.conditionStatus.ready; check both still hold in the new version."
+      ]
+    },
+    {
+      "matchFileNames": [
+        "base/kube-prometheus-stack.yaml"
+      ],
+      "groupName": "kube-prometheus-stack chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "kube-prometheus-stack"
+      ],
+      "groupName": "kube-prometheus-stack chart"
+    },
+    {
+      "matchFileNames": [
+        "base/redpanda.yaml"
+      ],
+      "groupName": "redpanda chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "redpanda"
+      ],
+      "groupName": "redpanda chart"
+    },
+    {
+      "description": "The broker image of svp-data (a chart of the code repository) and of compose there moves with the redpanda chart; Renovate of the code repository proposes those, keep the versions in step.",
+      "matchDepNames": [
+        "docker.io/redpandadata/redpanda",
+        "redpandadata/redpanda"
+      ],
+      "groupName": "redpanda chart"
+    },
+    {
+      "matchFileNames": [
+        "base/loki.yaml"
+      ],
+      "groupName": "loki chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "loki"
+      ],
+      "groupName": "loki chart"
+    },
+    {
+      "matchFileNames": [
+        "base/tempo.yaml"
+      ],
+      "groupName": "tempo chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "tempo"
+      ],
+      "groupName": "tempo chart"
+    },
+    {
+      "matchFileNames": [
+        "base/pyroscope.yaml"
+      ],
+      "groupName": "pyroscope chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "pyroscope"
+      ],
+      "groupName": "pyroscope chart"
+    },
+    {
+      "matchFileNames": [
+        "base/otel-collector.yaml"
+      ],
+      "groupName": "opentelemetry-collector chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "opentelemetry-collector"
+      ],
+      "groupName": "opentelemetry-collector chart"
+    },
+    {
+      "description": "The Collector image of base/otel-collector.yaml is also pinned in the code repository (compose, OTELCOL_IMAGE of its Makefile): keep the versions in step.",
+      "matchDepNames": [
+        "otel/opentelemetry-collector-contrib"
+      ],
+      "groupName": "opentelemetry-collector chart"
+    },
+    {
+      "matchFileNames": [
+        "base/argo-cd.yaml"
+      ],
+      "groupName": "argo-cd chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/bootstrap.json"
+      ],
+      "matchDepNames": [
+        "argo-cd"
+      ],
+      "groupName": "argo-cd chart"
+    },
+    {
+      "description": "The checker commit: one pull request whenever main of the code repository moves, read with the code repository's log before merging (the new commit's deploy/ci/gitops-check.sh checks this tree from then on).",
+      "matchDatasources": [
+        "git-refs"
+      ],
+      "groupName": "checker commit",
+      "minimumReleaseAge": null
+    }
+  ]
+}
