@@ -78,6 +78,13 @@ kubelet:
   namespace: svp-obs
 
 prometheusOperator:
+  # Sync waves inside this Application: the operator (wave 1) starts only once the chart's CRDs (wave 0) are Established,
+  # because Argo CD applies a wave after every resource of the one before is healthy, and a CRD is healthy only when
+  # Established. The operator checks once, at start, whether the API server serves prometheuses; if not, it logs a
+  # warning and never runs its Prometheus controller until restarted, so a cluster built in one wave could come up with
+  # no Prometheus at all. The Prometheus and Alertmanager objects (wave 2) come after the operator.
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   namespaces:
     releaseNamespace: true
   kubeletService:
@@ -139,6 +146,8 @@ kube-state-metrics:
     tag: v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b
 
 prometheus:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   prometheusSpec:
     # By digest, as prometheusOperator above (tag holds version@digest), with two differences. Unless version is set,
     # the chart writes tag into the version field of the Prometheus object, which the operator parses as a version and
@@ -234,6 +243,8 @@ prometheus:
       limits: {memory: 1Gi}
 
 alertmanager:
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   alertmanagerSpec:
     # The routing of compose (severity=page to Telegram when .env has a bot, everything else only in the UI), from
     # Secret alertmanager-svp, which deploy/k8s/secrets.sh writes from .env before this chart is installed (key
