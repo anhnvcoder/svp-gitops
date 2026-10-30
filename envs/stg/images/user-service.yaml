@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/user-service.yaml and envs/stg/user-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/user-service
-  tag: "2d9dab056a1f"
-  digest: "sha256:6e7bad58f88d021a9093fbe78ce1cd3a80f7653e8e2fa187912dd715631bb7e0"
+  tag: "ec12f1141e57"
+  digest: "sha256:d6482042afe14ae566440b757e99580c415749ebb195e64710391f40c91ca770"
