@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/feed-service.yaml and envs/stg/feed-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/feed-service
-  tag: "ec12f1141e57"
-  digest: "sha256:0aa599d427cf6e355961ea43aad8756ba2441c4f3e85d369aa07fdec97ba5213"
+  tag: "28bf2ca56af7"
+  digest: "sha256:c20b84e731d6563d9fdc2f89e7437bd9b3697fd445defde0356cbac038e4268d"
