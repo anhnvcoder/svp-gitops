@@ -1,3 +1,4 @@
+# Trial change (closed without merge): a shared file needs a Code Owner review.
 # Release gateway of chart deploy/helm/svp-service: the
 # public HTTP API behind Envoy at https://api.svp.localhost:8443. Secret gateway-env holds JWT_VERIFY_KEYS, public
 # keys only: the gateway verifies tokens, it cannot sign them (threat model JWT-10).
