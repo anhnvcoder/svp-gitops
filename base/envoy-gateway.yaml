@@ -53,7 +53,7 @@ global:
   images:
     # The controller, its certgen Job, and the shutdown-manager sidecar it adds to every Envoy pod.
     envoyGateway:
-      image: docker.io/envoyproxy/gateway:v1.9.2@sha256:9d67017c442a70e6ae9f1a358e6c80eb653c67c2e40823d9a991e0daf37ba926
+      image: docker.io/envoyproxy/gateway:v1.9.3@sha256:192fc9bdadb6d2462e8cf7bd702ce3dd9648f3310c6038787448a1f509b7cd9f
     # Only started when a rate limit policy exists (none here); the same digest v1.9.2 has built in.
     ratelimit:
       image: docker.io/envoyproxy/ratelimit:0482748e@sha256:5fdd8e3ae335ab6d64316f8d2fd9a886830075cbbb40a1d8065c869275909162
