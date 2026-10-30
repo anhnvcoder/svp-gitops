@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/gateway.yaml and envs/stg/gateway.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/gateway
-  tag: "ec12f1141e57"
-  digest: "sha256:792d0e3331aafbe58708679776058af67b74c99469d3274e0c33fe7bf5a5998a"
+  tag: "28bf2ca56af7"
+  digest: "sha256:c5aee5d81764d0efc0d40da91164969f220e3fb8194d6f8f864069ab9858dd0f"
