@@ -130,7 +130,7 @@
       "wave": 3,
       "repo": "https://grafana.github.io/helm-charts",
       "chart": "pyroscope",
-      "version": "2.4.0",
+      "version": "2.4.2",
       "values": "base/pyroscope.yaml"
     },
     {
