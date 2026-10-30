@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/web.yaml and envs/stg/web.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/web
-  tag: "ec12f1141e57"
-  digest: "sha256:79da84820e2540689d8ee0ce529310000ed166dcb4056cc12912a913a778dde1"
+  tag: "b28ba39897ba"
+  digest: "sha256:a69587e480883382285a819d6261256e79e03bdee17023c1e22b5deb53ed4605"
