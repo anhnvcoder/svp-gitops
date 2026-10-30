@@ -1,7 +1,7 @@
 # The commit of the code repository (https://github.com/anhnvcoder/short-video-platform) whose charts, deploy/helm/*
 # there, this environment runs: every Application of a chart of that repository reads it at this commit. A change of
 # a chart reaches stg only through this file, together with the images it was built for.
-revision: 28bf2ca56af73e7b0a15bb5999317bc464e97747
+revision: e66dd58dcd063761b67645ba4e0d02113d9f5553
 # Derived from that commit; written with it, and the check of this repository computes both again from it.
 # podSecurityVersion of deploy/helm/svp-cluster/values.yaml: the Pod Security Standard version of the namespaces of
 # wave 0, which come before chart svp-cluster labels the others.
