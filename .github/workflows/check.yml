@@ -32,7 +32,7 @@ env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/short-video-platform branch=main
-  CHECKER_COMMIT: c59c7426663d6ee0818c707417136e7b05311fd0
+  CHECKER_COMMIT: 2d9dab056a1f36d5f76aecc69ce16bc0c50f7396
 
 jobs:
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
@@ -75,6 +75,9 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
+          # Reads the deployment records of stg in this repository (deployments: read above), which a change of
+          # envs/prd/ must match whole; the job's own token, read-only.
+          GH_TOKEN: ${{ github.token }}
         run: |
           case "$EVENT_NAME" in
             pull_request) base=$(git -C gitops merge-base HEAD "origin/$GITHUB_BASE_REF") ;;
