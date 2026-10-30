@@ -1,7 +1,7 @@
-# The release image of web in prd, nothing else: the release on GHCR that CI of the code repository built,
+# The release image of web in stg, nothing else: the release on GHCR that CI of the code repository built,
 # scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/web.yaml and envs/prd/web.yaml when there is one.
+# digest. Its configuration is base/services/web.yaml and envs/stg/web.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/web
-  tag: "ec12f1141e57"
-  digest: "sha256:79da84820e2540689d8ee0ce529310000ed166dcb4056cc12912a913a778dde1"
+  tag: "2d9dab056a1f"
+  digest: "sha256:02dfe2a556f1b6d6a98a1df05b9e370721b290e6e1e617b43877dea2f437ae03"

@@ -1,7 +1,7 @@
-# The release image of gateway in prd, nothing else: the release on GHCR that CI of the code repository built,
+# The release image of gateway in stg, nothing else: the release on GHCR that CI of the code repository built,
 # scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/gateway.yaml and envs/prd/gateway.yaml when there is one.
+# digest. Its configuration is base/services/gateway.yaml and envs/stg/gateway.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/gateway
-  tag: "ec12f1141e57"
-  digest: "sha256:792d0e3331aafbe58708679776058af67b74c99469d3274e0c33fe7bf5a5998a"
+  tag: "2d9dab056a1f"
+  digest: "sha256:2f0a33452912ceb723191a6d9965918c652d226349235fbecdbd341ab7381c3d"

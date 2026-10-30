@@ -1,7 +1,7 @@
-# The release image of video-service in prd, nothing else: the release on GHCR that CI of the code repository built,
+# The release image of video-service in stg, nothing else: the release on GHCR that CI of the code repository built,
 # scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/video-service.yaml and envs/prd/video-service.yaml when there is one.
+# digest. Its configuration is base/services/video-service.yaml and envs/stg/video-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/video-service
-  tag: "ec12f1141e57"
-  digest: "sha256:3a32c32941f7db76f20bf91fa294bc4d38398ac4ab5f74223c02d5c21fbe159b"
+  tag: "2d9dab056a1f"
+  digest: "sha256:ffb94b3f542450ee7b299c9cf669442fb4d5fbb9f1192886e26346d76b46c780"
