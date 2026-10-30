@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/media-worker.yaml and envs/stg/media-worker.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/media-worker
-  tag: "28bf2ca56af7"
-  digest: "sha256:15a3e70b87d3759ab4dda9b18401b486c7139cccde0a7d0e680e9138ac913ea5"
+  tag: "f59c4caed83e"
+  digest: "sha256:2bba825cd1295704db56f3d59077be9c39d075d928e53d3621f5c2d72b5fe177"
