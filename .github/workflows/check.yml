@@ -6,7 +6,7 @@
 #
 # The repository is public and a pull request from a fork runs this workflow with the fork's tree, so:
 # - no pull_request_target and no workflow_run: a pull request never runs with a write token or with secrets;
-# - the job reads only: contents (both checkouts) and deployments (the stg deployment records a pull request to
+# - the job reads only: contents (the three checkouts) and deployments (the stg deployment records a pull request to
 #   envs/prd/ is compared with);
 # - every action is GitHub's own and pinned to a full commit SHA: a tag moved to other code changes nothing here;
 # - checkout never leaves the token in .git/config (persist-credentials: false);
@@ -32,7 +32,7 @@ env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/short-video-platform branch=main
-  CHECKER_COMMIT: 2d9dab056a1f36d5f76aecc69ce16bc0c50f7396
+  CHECKER_COMMIT: 28bf2ca56af73e7b0a15bb5999317bc464e97747
 
 jobs:
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
@@ -59,6 +59,16 @@ jobs:
           path: code
           fetch-depth: 0
           persist-credentials: false
+      # The whole history of svp-web, the repository of the web client and a release source of its own: an image file
+      # naming one of its releases must have its tag on main of that repository (origin/main of this clone). A public
+      # repository read with the job's read-only token, which is not kept; the checker clones it itself when this
+      # folder is not given, so this step only makes that clone visible as a step of its own.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: anhnvcoder/svp-web
+          path: svp-web
+          fetch-depth: 0
+          persist-credentials: false
       - name: The commit of the checker
         run: git -C code log -1 --format='code repository at %H (%s)'
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -78,6 +88,8 @@ jobs:
           # Reads the deployment records of stg in this repository (deployments: read above), which a change of
           # envs/prd/ must match whole; the job's own token, read-only.
           GH_TOKEN: ${{ github.token }}
+          # The history of release source web (the checkout above).
+          SVP_SOURCE_DIR_WEB: ${{ github.workspace }}/svp-web
         run: |
           case "$EVENT_NAME" in
             pull_request) base=$(git -C gitops merge-base HEAD "origin/$GITHUB_BASE_REF") ;;

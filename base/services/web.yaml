@@ -1,7 +1,9 @@
-# Release web of chart deploy/helm/svp-service: the web client,
-# Next's standalone server built from web/ by deploy/docker/web.Dockerfile.
+# Release web of chart deploy/helm/svp-service: the web client, Next's standalone server, built by the CI of its own
+# repository, svp-web (Dockerfile at its root). While the client moves there, a release built from web/ of the code
+# repository (deploy/docker/web.Dockerfile) is still admitted: envs/<env>/images/web.yaml names which one runs. Both
+# images take the configuration below.
 protocol: http
-# The image's port (PORT of deploy/docker/web.Dockerfile), as in compose.
+# The image's port (PORT of the Dockerfile), as in compose.
 port: 3001
 resources:
   # Measured with kubectl top on the dev path of the CI verification runner (amd64, two runs on 2026-10-25, both SDKs
