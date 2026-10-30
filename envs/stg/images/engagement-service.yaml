@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/engagement-service.yaml and envs/stg/engagement-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/engagement-service
-  tag: "6ca2d8a795dd"
-  digest: "sha256:0103f15f9a673f1d66223ab786a7f4b64cf5f09c98ee2d0f22c6100ed8be6229"
+  tag: "2d9dab056a1f"
+  digest: "sha256:66bcbffd22664af662c6d4509fcedb1cbf6fdef53fa31191ae4c088140b1f446"
