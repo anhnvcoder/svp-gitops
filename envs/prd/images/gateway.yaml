@@ -4,4 +4,4 @@
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/gateway
   tag: "ec12f1141e57"
-  digest: "sha256:792d0e3331aafbe58708679776058af67b74c99469d3274e0c33fe7bf5a5998a"
+  digest: "sha256:2f0a33452912ceb723191a6d9965918c652d226349235fbecdbd341ab7381c3d"
