@@ -1,6 +1,6 @@
-# The release image of user-service in stg, nothing else: the release on GHCR that CI of the code repository built,
+# The release image of user-service in prd, nothing else: the release on GHCR that CI of the code repository built,
 # scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/user-service.yaml and envs/stg/user-service.yaml when there is one.
+# digest. Its configuration is base/services/user-service.yaml and envs/prd/user-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/user-service
   tag: "2d9dab056a1f"
