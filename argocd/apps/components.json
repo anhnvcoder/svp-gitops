@@ -1,4 +1,18 @@
 {
+  "platforms": {
+    "k3d": {
+      "envs": [
+        "stg"
+      ],
+      "localHosts": true
+    },
+    "eks": {
+      "envs": [
+        "stg",
+        "prd"
+      ]
+    }
+  },
   "components": [
     {
       "name": "cert-manager",

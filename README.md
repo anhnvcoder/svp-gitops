@@ -51,6 +51,9 @@ và ở Amazon EKS (`eks`, giai đoạn 7); prd chỉ chạy trên `eks`. Khác 
 `envs/stg/` (bản phát hành, `charts.yaml`, overlay) dùng chung cho cả hai và promote prd không đổi.
 
 - Root nhận giá trị `platform` (`k3d` | `eks`, bắt buộc, không mặc định, như `env`); bootstrap đặt (`deploy/k8s/gitops.sh` của repo code).
+- Khoá `platforms` đầu `components.json` (ngoài danh sách `components`): mỗi nền tảng nêu `envs` (env chạy trên nền tảng đó: `k3d` chỉ `stg`,
+  `eks` cả `stg` và `prd`) và `localHosts: true` khi render của nó được nêu tên lab `*.svp.localhost` (chỉ `k3d`; vắng là không được). Root
+  chart không đọc khoá này; check của repo code đọc nó (từ bản checker sau, thay cho danh sách ghi cứng `stg:k3d stg:eks prd:eks`).
 - Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
   `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `aws-load-balancer-controller` (NLB trước Envoy từ Service
   của Envoy, wave 1 vì Gateway `svp` chỉ `Programmed` khi Service có địa chỉ), `external-dns` (bản ghi Route 53 cho host của HTTPRoute gắn
