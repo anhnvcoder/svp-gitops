@@ -3,5 +3,5 @@
 # digest. Its configuration is base/services/video-service.yaml and envs/stg/video-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/short-video-platform/video-service
-  tag: "bb560f508cc2"
-  digest: "sha256:2aeb9d8dcdae66b07b3ad01e3844389eeb48d44b692cebb95779a034d083f503"
+  tag: "bfd324a2696e"
+  digest: "sha256:086bd663251d1e6eb273c2baf3cca93577c45d6d51031587dafdbc415b2bb9c6"
