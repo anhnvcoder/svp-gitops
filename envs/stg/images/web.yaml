@@ -1,7 +1,8 @@
-# The release image of web in stg, nothing else: the release on GHCR that CI of https://github.com/anhnvcoder/svp-web
-# built, scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster
-# pulls the digest. Its configuration is base/services/web.yaml and envs/stg/web.yaml when there is one.
+# The release image of web in stg, nothing else: the release on GHCR that CI of
+# https://github.com/anhnvcoder/svp-frontend built, scanned and signed (.github/workflows/images.yml there). The tag
+# names the commit for people; the cluster pulls the digest. Its configuration is base/services/web.yaml and
+# envs/stg/web.yaml when there is one.
 image:
-  repository: ghcr.io/anhnvcoder/svp-web/web
-  tag: "2d78ad129f14"
-  digest: "sha256:9fd3d8c3bb3d1f02c89c4d1d9b878f342766a69065449364833b7305145b7b63"
+  repository: ghcr.io/anhnvcoder/svp-frontend/web
+  tag: "1241c271eec1"
+  digest: "sha256:83798a84edffd9ffbe3e17befd3d862ea40d0ef1eb6d3666cb8f0bf51ac57c4b"
