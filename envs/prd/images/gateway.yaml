@@ -1,7 +1,8 @@
-# The release image of gateway in prd, nothing else: the release on GHCR that CI of the code repository built,
-# scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/gateway.yaml and envs/prd/gateway.yaml when there is one.
+# The release image of gateway in prd, nothing else: the release on GHCR that CI of
+# https://github.com/anhnvcoder/svp-backend built, scanned and signed (.github/workflows/images.yml there). The tag
+# names the commit for people; the cluster pulls the digest. Its configuration is base/services/gateway.yaml and
+# envs/prd/gateway.yaml when there is one.
 image:
-  repository: ghcr.io/anhnvcoder/short-video-platform/gateway
-  tag: "bb560f508cc2"
-  digest: "sha256:df1d66cbe0d82d86d80e773f5b6b1a0daf74908ad97a38891f8c6fb4b8c0bb83"
+  repository: ghcr.io/anhnvcoder/svp-backend/gateway
+  tag: "b5f22c232875"
+  digest: "sha256:83c0d25885a08089e7a8f9576d0cc6cbdd2ade9b8f1712125eb5aaaffb0fb6b4"
