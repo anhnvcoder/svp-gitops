@@ -1,0 +1,4 @@
+# Platform eks: GlitchTip's database svp_glitchtip is on Amazon RDS, reached by address (the database subnets, from
+# svp-observability.values.tpl beside this file); nothing scrapes a Postgres exporter there.
+postgres:
+  mode: external

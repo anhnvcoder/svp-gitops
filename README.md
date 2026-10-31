@@ -17,6 +17,10 @@ base/                       values gốc của mọi môi trường; đường d
   <component>.yaml          values của chart upstream (cả argo-rollouts-amd64.yaml theo kiến trúc node)
   argo-cd.yaml              values của chính Argo CD
   services/<svc>.yaml       values của 7 release chart svp-service, không có khối image
+platforms/<platform>/       k3d và eks: khác biệt của nền tảng (mục Lớp nền tảng)
+  README.md                 nền tảng là gì
+  <component>.yaml          values giống nhau trên mọi cluster của nền tảng
+  <component>.values.tpl    mẫu sinh values từ giá trị cluster của root (thứ phụ thuộc account, buổi)
 envs/<env>/                 stg và prd
   <component>.yaml          overlay: chỉ phần khác gốc, comment đầu file nói vì sao
   svp-policy.yaml           bật kiểm build provenance của Kyverno (requireProvenance: true)
@@ -31,10 +35,66 @@ argocd/
 CODEOWNERS, renovate.json
 ```
 
-Thứ tự ghép values của một Application: `values.yaml` của chart → `base/` → `envs/<env>/<name>.yaml` → `envs/<env>/images/<name>.yaml`.
-Chart `argocd/apps` từ chối lúc render (Argo CD báo `ComparisonError` trên root): env không có thư mục, thiếu `charts.yaml` hay có khoá
-khác ba khoá của nó, overlay không trùng tên component, overlay của release `svp-service` có `image`, `canary`, `httpRoute.name`,
-thiếu một trong 7 file `images/`, file `images/` có khoá ngoài `image`. `charts` là tên dành riêng, không component nào được mang.
+Thứ tự ghép values của một Application: `values.yaml` của chart → `base/` → `platforms/<platform>/<name>.yaml` → `envs/<env>/<name>.yaml`
+→ `envs/<env>/images/<name>.yaml` → phần mẫu `platforms/<platform>/<name>.values.tpl` sinh ra (`helm.valuesObject`, Argo CD đọc sau mọi
+file). Chart `argocd/apps` từ chối lúc render (Argo CD báo `ComparisonError` trên root): env không có thư mục, thiếu `charts.yaml` hay có
+khoá khác ba khoá của nó, overlay không trùng tên component, overlay của release `svp-service` có `image`, `canary`, `httpRoute.name`,
+thiếu một trong 7 file `images/`, file `images/` có khoá ngoài `image`; `platform` không đặt hay khác `k3d`, `eks`, trường `platforms` của
+`components.json` sai, file của nền tảng không trùng component chạy trên nền tảng đó, không phải map YAML hay đặt `cluster`, file hay mẫu của
+release `svp-service` có `image`, `canary`, `httpRoute.name`, `cluster` thiếu khoá hay sai dạng (mục dưới). `charts` là tên dành riêng,
+không component nào được mang.
+
+## Lớp nền tảng
+
+Một env chạy trên nhiều nền tảng: stg chạy ở cluster lab `k3d` (cluster GitOps của repo code, runner của `verify.yml`, nơi ghi bản ghi stg)
+và ở Amazon EKS (`eks`, giai đoạn 7); prd chỉ chạy trên `eks`. Khác biệt giữa hai nền tảng nằm ở `platforms/`, không ở `envs/`, nên
+`envs/stg/` (bản phát hành, `charts.yaml`, overlay) dùng chung cho cả hai và promote prd không đổi.
+
+- Root nhận giá trị `platform` (`k3d` | `eks`, bắt buộc, không mặc định, như `env`); bootstrap đặt (`deploy/k8s/gitops.sh` của repo code).
+- Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
+  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `aws-load-balancer-controller` (NLB trước Envoy từ Service
+  của Envoy, wave 1 vì Gateway `svp` chỉ `Programmed` khi Service có địa chỉ), `external-dns` (bản ghi Route 53 cho host của HTTPRoute gắn
+  vào Gateway `svp`, wave 2). Đường dev (`make k8s-up`) chạy component của `k3d`.
+- `platforms/k3d/` chỉ có README: cluster k3d chạy đúng `base/`, root với `platform=k3d` render đúng các Application như trước khi có lớp này.
+- `platforms/eks/`: Postgres `external` (RDS qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod
+  Identity), StorageClass `gp3` mặc định của `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope
+  (Redpanda không ghim class, nhận class mặc định), issuer ACME Let's Encrypt production (DNS-01 Route 53), Service NLB của Envoy và
+  NetworkPolicy của nó, nhãn `elbv2.k8s.aws/pod-readiness-gate-inject: enabled` trên namespace `envoy-gateway-system` (root đặt trong
+  `managedNamespaceMetadata` của `envoy-gateway`, chỉ `eks`: pod Envoy mới chỉ Ready khi NLB thấy target khoẻ, nên rollout Envoy không
+  làm cổng vào từ chối kết nối), API server cổng 443, egress theo địa chỉ (`externalPeers` của `svp-service`: subnet RDS cổng 5432, dải S3 của region
+  cổng 443, agent Pod Identity `169.254.170.23` cổng 80).
+- File `<name>.yaml` giữ thứ giống nhau trên mọi cluster của nền tảng; mẫu `<name>.values.tpl` giữ thứ cluster quyết định (VPC, tên, bucket,
+  zone), render bằng Helm `tpl` trên `.Values.cluster`, mỗi giá trị qua `quote`/`toJson`. Phần mẫu sinh ra đọc sau overlay của env, nên
+  overlay không đặt khoá mà mẫu đặt (mẫu thắng). Danh sách trong values bị thay cả danh sách khi ghép (`platformNamespaces` của
+  `svp-cluster` nêu đủ mọi phần tử); cờ của ExternalDNS là map `extraArgs` để mẫu thêm cờ mà không xoá cờ của `base/`. `null` chỉ xoá
+  khoá có trong `values.yaml` của chart, nên khoá env của release được làm rỗng (`""`, service đọc như không đặt).
+
+### Hợp đồng giá trị `cluster`
+
+Giá trị phụ thuộc account AWS hay buổi không bao giờ vào git: Terraform của `svp-infra` (`aws/envs/<env>`) xuất output `cluster_values`,
+script buổi ghi ra file, bootstrap đặt thành giá trị `cluster` của root `svp-root`. `argocd/apps/values.yaml` để `cluster: {}`; file nào trong
+git đặt `cluster` thì check đỏ. Root kiểm từng khoá trước khi render mẫu (thiếu hay sai dạng thì dừng, nêu tên khoá). Check của repo này
+render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml` của repo code (tên `.example`, CIDR tài liệu, account toàn số 0).
+
+| Khoá | Dạng | Ai dùng (mẫu ở `platforms/eks/`) |
+| --- | --- | --- |
+| `name` | tên cluster EKS | `clusterName` của `aws-load-balancer-controller`, `txtOwnerId` của `external-dns` |
+| `region` | region AWS | `region` của LBC, `AWS_DEFAULT_REGION` của ExternalDNS, `tls.acme.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
+| `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
+| `vpcCidr` | CIDR | `nodeSubnet` và `envoy.networkPolicy.healthCheckCIDR` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `TRUSTED_PROXY_CIDRS` của `gateway` |
+| `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
+| `dbCidrs` | danh sách CIDR | `postgres.external.cidrs` của `svp-data`, `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service` |
+| `domain` | tên miền | `apexHost` (web), `wildcardHost` `*.<domain>` của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web`; `domainFilters` của ExternalDNS |
+| `hostedZoneId` | `Z…` | `tls.acme.hostedZoneId` của `svp-cluster`, `--zone-id-filter` của ExternalDNS |
+| `acmeEmail` | email | `tls.acme.email` của `svp-cluster` |
+| `rdsAddress` | tên miền | `postgres.external.host` của `svp-data` |
+| `uploadsBucket` | tên bucket | `S3_UPLOADS_BUCKET` của `video-service`, `media-worker`; `UPLOAD_ORIGIN` `https://<uploadsBucket>.s3.<region>.amazonaws.com` của `web` |
+| `mediaBucket` | tên bucket | `S3_MEDIA_BUCKET` của `video-service`, `media-worker` |
+| `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_ORIGIN` của `web` |
+| `s3Cidrs` | danh sách CIDR | `externalPeers.s3` (cổng 443, cùng agent Pod Identity) của `video-service`, `media-worker` |
+
+Thêm khoá thì sửa cả bốn nơi: output `cluster_values` của `svp-infra`, mẫu và phép kiểm khoá của root ở đây (`argocd/apps/templates/applications.yaml`)
+cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 
 ## Ai duyệt gì
 
@@ -69,8 +129,8 @@ thiếu một trong 7 file `images/`, file `images/` có khoá ngoài `image`. `
 ## Check
 
 `.github/workflows/check.yml` checkout repo này và repo code ở `CHECKER_COMMIT` (ghim trong chính workflow, đổi bằng PR có Code Owner;
-Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó: render mọi env × kiến trúc node với chart của repo
-code ở `revision` của env, quy tắc của `charts.yaml` và `images/`, image của chart upstream ghim digest, render prd không còn
+Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó: render mọi env × nền tảng (stg trên `k3d` và `eks`, prd
+trên `eks`) × kiến trúc node với chart của repo code ở `revision` của env, quy tắc của `charts.yaml` và `images/`, image của chart upstream ghim digest, render prd và nền tảng `eks` không còn
 `svp.localhost`, chữ ký, attestation và provenance của bản phát hành đã đổi. Quy tắc của `images/` theo nguồn phát hành (bảng nguồn của
 chart `svp-policy` ở `revision`): bản của repo code có tag là `revision` hay tổ tiên của nó (image không mới hơn chart); bản của `svp-frontend`
 có tag là commit trên `main` của `svp-frontend`, đọc từ bản clone ẩn danh đủ lịch sử (`--filter=blob:none`) mà check tự làm theo URL

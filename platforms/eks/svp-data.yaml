@@ -1,0 +1,8 @@
+# Platform eks: Postgres is Amazon RDS (Service svp-pg-rw becomes an ExternalName for it, so every connection string
+# stays the same; the pg-bootstrap Job makes the roles and databases there as RDS's master user) and objects are on
+# Amazon S3, whose buckets Terraform makes: no CloudNativePG Cluster, backup or object store here. The RDS endpoint and
+# the database subnets come from svp-data.values.tpl beside this file.
+postgres:
+  mode: external
+s3:
+  mode: external

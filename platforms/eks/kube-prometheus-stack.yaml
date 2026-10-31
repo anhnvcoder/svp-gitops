@@ -1,0 +1,8 @@
+# Platform eks: Prometheus' volume on StorageClass gp3 (EBS, chart svp-cluster) instead of k3s's local-path, which
+# base/ names. Alertmanager has no volume (base/).
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3

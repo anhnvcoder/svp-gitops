@@ -1,0 +1,4 @@
+# Platform eks: the volume on StorageClass gp3 (EBS, chart svp-cluster) instead of k3s's local-path, which base/ names.
+pyroscope:
+  persistence:
+    storageClassName: gp3

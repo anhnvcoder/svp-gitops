@@ -1,0 +1,55 @@
+# Platform eks: Postgres on Amazon RDS and objects on Amazon S3 (no CloudNativePG, no object store in the cluster), the
+# EBS volumes of StorageClass gp3 as the default class, certificates from Let's Encrypt (DNS-01 on Route 53), an
+# internet-facing NLB of AWS Load Balancer Controller in front of Envoy, the API server on 443. What depends on the
+# cluster (its VPC, service range, names, zone) comes from svp-cluster.values.tpl beside this file.
+cloudnativePG:
+  enabled: false
+s3:
+  mode: external
+# EKS has no default StorageClass and the EBS CSI driver makes none; the PersistentVolumeClaims that name no class
+# (Redpanda's) get this one, and those base/ pins to k3s's local-path name it in the files of this platform.
+storageClass:
+  enabled: true
+
+# The API server listens on 443 of the control plane's network interfaces in the VPC (nodeSubnet, from the template).
+kubeAPIPort: 443
+# No VXLAN on EKS: the VPC CNI gives pods addresses of the VPC, and the API server's webhook calls come from the control
+# plane's interfaces there, inside nodeSubnet.
+kyverno:
+  vxlanAddresses: []
+
+# The namespaces of the platform charts that run here, made before their chart with Pod Security "restricted": the
+# base's without cnpg-system (no CloudNativePG on EKS), with external-dns (component external-dns). A list replaces the
+# base's whole, so every one is named. AWS Load Balancer Controller runs in kube-system, which this chart never labels.
+platformNamespaces:
+  - name: argo-rollouts
+  - name: keda
+  - name: kyverno
+  - name: external-dns
+
+# Let's Encrypt production: smoke tests, k6 and browsers trust no staging certificate. The account's email and the
+# zone come from the template.
+tls:
+  issuer: acme
+  acme:
+    server: production
+
+envoy:
+  service:
+    # AWS Load Balancer Controller makes an internet-facing NLB for this Service: target type ip (straight to the Envoy
+    # pods' addresses), and the client's address kept, which the gateway's rate limits and logs key on (one trusted
+    # hop, Envoy's).
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: external
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+      service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true
+      # Envoy's readiness endpoint instead of a TCP connect to 10443: /ready fails as soon as Envoy starts draining, so
+      # the NLB stops sending new connections to a pod that is shutting down.
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: HTTP
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "19003"
+      service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /ready
+  # The Envoy pods face the internet here: their HTTPS port from everywhere, metrics from svp-obs, the health check port
+  # from the VPC (healthCheckCIDR, from the template).
+  networkPolicy:
+    enabled: true

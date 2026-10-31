@@ -1,0 +1,8 @@
+# Platform eks: the buckets are Amazon S3's, reached virtual-hosted (the bucket in the host name, S3's own
+# addressing) with the credentials of the pod's role (EKS Pod Identity, association svp/video-service): no access key,
+# here or in Secret video-service-env. The base's static key id is emptied, which the service reads as unset; null
+# would not drop it, since Helm deletes a key on null only when the chart's own values.yaml has it.
+env:
+  S3_CREDENTIALS: container
+  S3_PATH_STYLE: "false"
+  S3_ACCESS_KEY_ID: ""

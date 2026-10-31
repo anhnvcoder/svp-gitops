@@ -1,0 +1,78 @@
+# AWS Load Balancer Controller v3.6.2 (chart https://aws.github.io/eks-charts aws-load-balancer-controller 3.6.2),
+# release aws-load-balancer-controller in namespace kube-system, wave 1 of argocd/apps/components.json, on platform eks
+# only. It makes the internet-facing NLB in front of Envoy from the Service of EnvoyProxy svp (chart svp-cluster: its
+# annotations ask for type external, target type ip, client addresses kept), then registers the Envoy pods' addresses in
+# the NLB's target group (TargetGroupBinding). The version is the one whose IAM policy the infrastructure repository
+# gives the controller's role (aws/modules/eks/policies there): a new version comes with that policy, in step.
+#
+# Wave 1, beside svp-cluster and not after it: Gateway svp of svp-cluster reports Programmed (what Argo CD's health
+# check of a Gateway waits for) only once its Service has an address, the NLB's; a later wave would wait for good. Not
+# wave 0 either: its webhook certificate comes from cert-manager (wave 0), and a component of wave 0 gets Pod Security
+# "restricted" on its namespace, which kube-system's system pods do not meet.
+#
+# kube-system and its ServiceAccount aws-load-balancer-controller are the pair the controller's EKS Pod Identity
+# association names (the infrastructure repository): the pod gets the role's credentials from the Pod Identity agent,
+# never from the node (IMDSv2 with a hop limit of 1 keeps pods from the node's role), so the controller is also told
+# the region and the VPC instead of reading them from the instance metadata.
+#
+# What it renders with these values: its CRDs, the Deployment, ServiceAccount, RBAC, the webhook Service and
+# configurations, and two Issuers and two Certificates of cert-manager for the webhook's TLS. No IngressClass,
+# IngressClassParams (no Ingress here) and no Service webhook, so the only cluster-scoped kinds are the CRDs, the
+# ClusterRole, its binding and the webhook configurations (argocd/project.yaml). The ClusterRole is the chart's, with no
+# value to narrow it, in every namespace: read pods, nodes, endpoints, Gateway API objects; write Services, Ingresses,
+# TargetGroupBindings, ConfigMaps and the status of Gateways and routes. No right on Secrets (the chart's
+# clusterSecretsPermissions stays off): the webhook's key pair is a mounted volume.
+
+# The cluster's name, region and VPC come from value cluster (platforms/eks/aws-load-balancer-controller.values.tpl).
+
+# Two replicas, one leader at a time: the webhooks on TargetGroupBinding fail closed (failurePolicy Fail), so a
+# replica must answer while the other moves to another node (Spot nodes go at two minutes' notice).
+replicaCount: 2
+podDisruptionBudget:
+  maxUnavailable: 1
+
+serviceAccount:
+  name: aws-load-balancer-controller
+
+# The webhook's certificate from cert-manager (a self-signed CA, then the serving certificate, both in kube-system;
+# cainjector writes the CA into the webhook configurations). Without it the chart generates a new key pair at every
+# render, so each refresh of Argo CD would rotate the webhook's certificate and never settle.
+enableCertManager: true
+
+# The Service webhook makes every new Service of type LoadBalancer the controller's (it sets loadBalancerClass), and
+# fails closed: while no replica runs, no Service of that type can be created in the cluster. Envoy's Service names the
+# controller by annotation (type external) instead, which the controller reconciles without the webhook, and which the
+# EKS cloud provider leaves alone.
+enableServiceMutatorWebhook: false
+
+# No Ingress runs here: no IngressClass alb, no IngressClassParams (both cluster-scoped).
+createIngressClassResource: false
+ingressClassParams:
+  create: false
+
+controllerConfig:
+  featureGates:
+    # On by default since v3: the controller would also run Gateways of its own GatewayClasses. Gateway svp is Envoy
+    # Gateway's, and no GatewayClass of the controller exists; off, it watches no Gateway API object.
+    NLBGatewayAPI: false
+    ALBGatewayAPI: false
+
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {memory: 256Mi}
+
+# Pod Security "restricted" in substance, although kube-system enforces nothing: the chart's own settings plus seccomp
+# and no capability.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  capabilities:
+    drop: [ALL]
+
+# By digest (multi-arch index: linux/amd64 and linux/arm64), the chart's own tag beside it for the reader: a tag can be
+# pushed again to other content, a digest cannot. The chart renders repository:tag, so tag holds version@digest.
+image:
+  repository: public.ecr.aws/eks/aws-load-balancer-controller
+  tag: v3.6.2@sha256:fd51f0ec82f8d357837aa57fdfaa4fca7137b75f25a09b421d95c425c9dc2d94
