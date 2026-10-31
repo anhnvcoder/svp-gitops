@@ -3,5 +3,5 @@
 # pulls the digest. Its configuration is base/services/web.yaml and envs/stg/web.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-web/web
-  tag: "a3223e98cd59"
-  digest: "sha256:67aa4185723be9b2dc050eef6051b7cef68171ae92ccaf94488871e5a29c50df"
+  tag: "ef1b4d5c7869"
+  digest: "sha256:bb005e032bc3df3d966a339a71a5e08379c4c20d80c3b9254dcf068a12b2facf"
