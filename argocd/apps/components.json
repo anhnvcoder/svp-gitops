@@ -15,7 +15,7 @@
       "wave": 0,
       "repo": "oci://docker.io/envoyproxy",
       "chart": "gateway-helm",
-      "version": "v1.9.2",
+      "version": "1.9.3",
       "values": "base/envoy-gateway.yaml"
     },
     {
