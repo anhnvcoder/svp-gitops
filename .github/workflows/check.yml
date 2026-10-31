@@ -32,7 +32,7 @@ env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/short-video-platform branch=main
-  CHECKER_COMMIT: 28bf2ca56af73e7b0a15bb5999317bc464e97747
+  CHECKER_COMMIT: c049c1bc8089b095fed4996734b8a56282ab7121
 
 jobs:
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
