@@ -9,7 +9,7 @@
 repoURL: https://github.com/anhnvcoder/svp-gitops.git
 targetRevision: refs/heads/main
 # The code repository, which holds the charts deploy/helm/* (path of a component in components.json).
-chartRepoURL: https://github.com/anhnvcoder/short-video-platform.git
+chartRepoURL: https://github.com/anhnvcoder/svp-backend.git
 # AppProject that limits the sources, destinations and cluster-scoped kinds of every Application.
 project: svp
 # The architecture of the cluster's nodes, amd64 or arm64: a component of components.json with archValues gets the
