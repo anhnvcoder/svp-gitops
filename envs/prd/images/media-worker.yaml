@@ -1,7 +1,8 @@
-# The release image of media-worker in prd, nothing else: the release on GHCR that CI of the code repository built,
-# scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/media-worker.yaml and envs/prd/media-worker.yaml when there is one.
+# The release image of media-worker in prd, nothing else: the release on GHCR that CI of
+# https://github.com/anhnvcoder/svp-backend built, scanned and signed (.github/workflows/images.yml there). The tag
+# names the commit for people; the cluster pulls the digest. Its configuration is base/services/media-worker.yaml and
+# envs/prd/media-worker.yaml when there is one.
 image:
-  repository: ghcr.io/anhnvcoder/short-video-platform/media-worker
-  tag: "bb560f508cc2"
-  digest: "sha256:4ee7a03c8177a715b8b1b5dff3ce399af378e9d6055c0540fa04a5e6c28128b8"
+  repository: ghcr.io/anhnvcoder/svp-backend/media-worker
+  tag: "b5f22c232875"
+  digest: "sha256:dfc619a6d5468963c4f9fcc5f6172efede83b08e1e91f4fee54f91b858e8aec4"

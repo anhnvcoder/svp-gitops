@@ -1,7 +1,8 @@
-# The release image of engagement-service in prd, nothing else: the release on GHCR that CI of the code repository built,
-# scanned and signed (.github/workflows/images.yml there). The tag names the commit for people; the cluster pulls the
-# digest. Its configuration is base/services/engagement-service.yaml and envs/prd/engagement-service.yaml when there is one.
+# The release image of engagement-service in prd, nothing else: the release on GHCR that CI of
+# https://github.com/anhnvcoder/svp-backend built, scanned and signed (.github/workflows/images.yml there). The tag
+# names the commit for people; the cluster pulls the digest. Its configuration is
+# base/services/engagement-service.yaml and envs/prd/engagement-service.yaml when there is one.
 image:
-  repository: ghcr.io/anhnvcoder/short-video-platform/engagement-service
-  tag: "bb560f508cc2"
-  digest: "sha256:bc32995c652172ea62ae896f6e64e5c0604933c0e6dd62368130f967f5ec1f1c"
+  repository: ghcr.io/anhnvcoder/svp-backend/engagement-service
+  tag: "b5f22c232875"
+  digest: "sha256:2bea7961919c8bc9b8cbc5c6cccc6a1359fc167f3baa0194481afaed873a418b"
