@@ -1,12 +1,12 @@
 # Check of every pull request and of every push to main of this repository: deploy/ci/gitops-check.sh of the code
-# repository (https://github.com/anhnvcoder/short-video-platform), at the commit CHECKER_COMMIT below, on this tree. The
+# repository (https://github.com/anhnvcoder/svp-backend), at the commit CHECKER_COMMIT below, on this tree. The
 # logic is that script's alone, so it runs the same on a machine against a clone; a pull request here cannot change
 # what checks it except by changing this file, which has a code owner. Job gitops-ok is the only check the ruleset of
 # main requires, so the jobs before it can be renamed or added without touching the ruleset.
 #
 # The repository is public and a pull request from a fork runs this workflow with the fork's tree, so:
 # - no pull_request_target and no workflow_run: a pull request never runs with a write token or with secrets;
-# - the job reads only: contents (the three checkouts) and deployments (the stg deployment records a pull request to
+# - the job reads only: contents (the two checkouts) and deployments (the stg deployment records a pull request to
 #   envs/prd/ is compared with);
 # - every action is GitHub's own and pinned to a full commit SHA: a tag moved to other code changes nothing here;
 # - checkout never leaves the token in .git/config (persist-credentials: false);
@@ -31,8 +31,8 @@ concurrency:
 env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
-  # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/short-video-platform branch=main
-  CHECKER_COMMIT: c049c1bc8089b095fed4996734b8a56282ab7121
+  # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
+  CHECKER_COMMIT: b5f22c2328758b62909dae1e4026707389892d8c
 
 jobs:
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
@@ -54,19 +54,9 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: anhnvcoder/short-video-platform
+          repository: anhnvcoder/svp-backend
           ref: ${{ env.CHECKER_COMMIT }}
           path: code
-          fetch-depth: 0
-          persist-credentials: false
-      # The whole history of svp-web, the repository of the web client and a release source of its own: an image file
-      # naming one of its releases must have its tag on main of that repository (origin/main of this clone). A public
-      # repository read with the job's read-only token, which is not kept; the checker clones it itself when this
-      # folder is not given, so this step only makes that clone visible as a step of its own.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: anhnvcoder/svp-web
-          path: svp-web
           fetch-depth: 0
           persist-credentials: false
       - name: The commit of the checker
@@ -88,8 +78,10 @@ jobs:
           # Reads the deployment records of stg in this repository (deployments: read above), which a change of
           # envs/prd/ must match whole; the job's own token, read-only.
           GH_TOKEN: ${{ github.token }}
-          # The history of release source web (the checkout above).
-          SVP_SOURCE_DIR_WEB: ${{ github.workspace }}/svp-web
+        # No SVP_SOURCE_DIR_*: the checker clones the repository of every other release source itself, anonymously,
+        # from the URL the table of release sources at each environment's revision gives. A renamed repository has its
+        # old URL in an older table and its new URL in a newer one, and one checkout has one origin, so a checkout here
+        # would fit one of them only; GitHub redirects the old URL to the repository.
         run: |
           case "$EVENT_NAME" in
             pull_request) base=$(git -C gitops merge-base HEAD "origin/$GITHUB_BASE_REF") ;;
