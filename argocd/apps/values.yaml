@@ -1,6 +1,7 @@
-# Root of the GitOps path. Every values file an Application reads (base/, envs/<env>/, envs/<env>/images/) comes from
-# this repository at this revision, through a source with ref "values"; the charts of the code repository come from
-# chartRepoURL at the commit envs/<env>/charts.yaml pins, upstream charts from the repositories components.json pins.
+# Root of the GitOps path. Every values file an Application reads (base/, platforms/<platform>/, envs/<env>/,
+# envs/<env>/images/) comes from this repository at this revision, through a source with ref "values"; the charts of
+# the code repository come from chartRepoURL at the commit envs/<env>/charts.yaml pins, upstream charts from the
+# repositories components.json pins.
 # Root Application svp-root (deploy/k8s/gitops.sh of the code repository) sets targetRevision to the revision it follows
 # itself, the one whose release images the bootstrap has checked. Always a full ref (refs/heads/<branch>) or a commit:
 # Argo CD resolves a short name with the first ref of that name, a tag included, so a tag named main could be deployed.
@@ -23,3 +24,15 @@ nodeArch: arm64
 # word. The bootstrap sets stg, the only environment a lab cluster runs; prd is rendered by the check only. The dev path
 # does not use this chart and reads base/ alone.
 env: ""
+# The platform this cluster runs on, the name of a directory of platforms/ (files/platforms is a symlink to it): k3d, a
+# lab cluster, or eks, Amazon EKS. A component of components.json with a platforms field gets an Application only on the
+# platforms it lists; an Application reads platforms/<platform>/<name>.yaml after its base/ values and before the
+# environment's, and the values its platform's template platforms/<platform>/<name>.values.tpl renders from cluster
+# below after all of them (templates/applications.yaml). Required, no default, as env: a cluster that forgot it would
+# get the components and values of no platform at all. The bootstrap sets it: k3d on a lab cluster, eks on EKS.
+platform: ""
+# What depends on the AWS account or on one session (a VPC, a bucket, a name of the hosted zone), the map the
+# infrastructure repository's Terraform outputs as cluster_values, set by the bootstrap of an EKS cluster and never
+# written in git: this file sets it to nothing, and the check of this repository fails on a file that sets it. The
+# templates of the platform turn it into values (the keys are listed in templates/applications.yaml and README.md).
+cluster: {}

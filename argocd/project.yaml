@@ -9,7 +9,7 @@ metadata:
   name: svp
   namespace: argocd
 spec:
-  description: Short-video platform on the local k3d cluster svp
+  description: Short-video platform on a lab k3d cluster or on Amazon EKS
   # This repository (the root chart and every values file) and the code repository (its charts, deploy/helm/*, read
   # only at the commit envs/<env>/charts.yaml pins), both over HTTPS without credentials as repoURL and chartRepoURL of
   # argocd/apps/values.yaml name them, and the chart repositories of components.json, nothing else.
@@ -29,12 +29,17 @@ spec:
     - https://argoproj.github.io/argo-helm
     - https://kyverno.github.io/kyverno/
     - https://charts.external-secrets.io
+    # Platform eks only: AWS Load Balancer Controller, ExternalDNS.
+    - https://aws.github.io/eks-charts
+    - https://kubernetes-sigs.github.io/external-dns/
   # The project's namespaces and those of the platform charts, on this cluster only. argocd holds the Applications the
   # root makes. kube-system only because KEDA's chart puts RoleBinding keda-operator-auth-reader there: it binds the
   # Role extension-apiserver-authentication-reader, which exists in kube-system alone, so that KEDA's metrics server
-  # may read ConfigMap extension-apiserver-authentication. Without it Application keda never syncs. external-secrets
-  # holds External Secrets Operator; svp-secrets the source Secrets its stores read on a lab cluster (no chart writes
-  # one there: chart svp-cluster makes the namespace, its Roles and NetworkPolicy).
+  # may read ConfigMap extension-apiserver-authentication. Without it Application keda never syncs. On platform eks
+  # kube-system also holds AWS Load Balancer Controller, the namespace its EKS Pod Identity association names.
+  # external-secrets holds External Secrets Operator; svp-secrets the source Secrets its stores read on a lab cluster
+  # (no chart writes one there: chart svp-cluster makes the namespace, its Roles and NetworkPolicy). external-dns holds
+  # ExternalDNS (platform eks).
   destinations:
     - {server: https://kubernetes.default.svc, namespace: svp}
     - {server: https://kubernetes.default.svc, namespace: svp-data}
@@ -50,9 +55,11 @@ spec:
     - {server: https://kubernetes.default.svc, namespace: kube-system}
     - {server: https://kubernetes.default.svc, namespace: external-secrets}
     - {server: https://kubernetes.default.svc, namespace: svp-secrets}
-  # Cluster-scoped kinds the charts render (helm template of every component with its values), nothing else: no
-  # PersistentVolume, StorageClass, PriorityClass, node or admission policy of another kind. Namespaced kinds are not
-  # listed: every one is allowed in the namespaces above.
+    - {server: https://kubernetes.default.svc, namespace: external-dns}
+  # Cluster-scoped kinds the charts render (helm template of every component with its values, on each platform),
+  # nothing else: no PersistentVolume, PriorityClass, IngressClass, node or admission policy of another kind. Namespaced
+  # kinds are not listed: every one is allowed in the namespaces above. AWS Load Balancer Controller and ExternalDNS
+  # (platform eks) need none beyond the CRDs, RBAC and webhook configurations here.
   clusterResourceWhitelist:
     - {group: "", kind: Namespace}
     - {group: apiextensions.k8s.io, kind: CustomResourceDefinition}
@@ -71,9 +78,12 @@ spec:
     - {group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicyBinding}
     # KEDA's external metrics API.
     - {group: apiregistration.k8s.io, kind: APIService}
-    # Chart svp-cluster: the cluster CA's issuers and Envoy Gateway's GatewayClass.
+    # Chart svp-cluster: the cluster CA's issuers (on platform eks Let's Encrypt's) and Envoy Gateway's GatewayClass.
     - {group: cert-manager.io, kind: ClusterIssuer}
     - {group: gateway.networking.k8s.io, kind: GatewayClass}
+    # Chart svp-cluster on platform eks: StorageClass gp3, the cluster's default class (EBS volumes). No other chart
+    # renders one.
+    - {group: storage.k8s.io, kind: StorageClass}
     # Chart svp-data: KEDA's login to Redpanda, read from Secret keda/keda-kafka.
     - {group: keda.sh, kind: ClusterTriggerAuthentication}
     # Chart svp-policy: the image policy of namespace svp. Kyverno's own chart needs no kind beyond the CRDs and RBAC

@@ -1,0 +1,49 @@
+# ExternalDNS v0.23.0 (chart https://kubernetes-sigs.github.io/external-dns/ external-dns 1.23.0), release external-dns
+# in namespace external-dns, wave 2 of argocd/apps/components.json, on platform eks only. It writes the DNS records of
+# the hostnames of the HTTPRoutes attached to Gateway svp (the API's, the web client's) into the lab's Route 53 hosted
+# zone, each an alias of the NLB that AWS Load Balancer Controller made for Envoy (the address in the Gateway's
+# status), and deletes them once the route is gone. Wave 2: its namespace comes from chart svp-cluster (wave 1,
+# platformNamespaces of platforms/eks/svp-cluster.yaml) with Pod Security "restricted" before its first pod, and the
+# routes it reads need nothing of it to exist.
+#
+# external-dns and its ServiceAccount external-dns are the pair the EKS Pod Identity association of its role names
+# (the infrastructure repository): the role may change records of the lab's zone only. Its ClusterRole, the chart's:
+# get, list and watch Gateways, HTTPRoutes and namespaces, nothing else (no Secret, no Service, no pod). Its pod meets
+# "restricted" as the chart renders it (non-root, read-only root, drop ALL, seccomp RuntimeDefault).
+#
+# What it may touch, each limit on its own: the zone of cluster.hostedZoneId alone (--zone-id-filter), public zones,
+# names under cluster.domain alone (domainFilters, with --aws-zone-match-parent so that the zone above the domain
+# matches), and of those only the records it owns: registry txt writes a TXT record of owner cluster.name beside each
+# record it makes, and policy sync deletes only records with that owner. The NS and SOA records of the zone, and any
+# record it did not make, stay as they are; no record type but A, AAAA and CNAME (the default) is managed. The zone id,
+# domain and owner come from value cluster (platforms/eks/external-dns.values.tpl).
+
+serviceAccount:
+  name: external-dns
+
+# HTTPRoutes only, and only through Gateway svp of namespace svp-edge: a route attached to another Gateway gets no
+# record.
+sources: [gateway-httproute]
+gatewayNamespace: svp-edge
+policy: sync
+registry: txt
+# A record within seconds of the route's change rather than at the next 1-minute loop, so a session waits less for
+# its names.
+triggerLoopOnEvent: true
+provider:
+  name: aws
+# A map, so that the template of the platform adds its arguments (the zone id) to these instead of replacing a list.
+extraArgs:
+  gateway-name: svp
+  aws-zone-type: public
+  aws-zone-match-parent: true
+
+resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {memory: 128Mi}
+
+# By digest (multi-arch index: linux/amd64 and linux/arm64), the chart's own tag beside it for the reader: a tag can be
+# pushed again to other content, a digest cannot. The chart renders repository:tag, so tag holds version@digest.
+image:
+  repository: registry.k8s.io/external-dns/external-dns
+  tag: v0.23.0@sha256:1854499e2b08cee47c40a08e356bff20dcb192dbcfde8378fc3f900f12cad5a3

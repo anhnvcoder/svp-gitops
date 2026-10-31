@@ -35,13 +35,28 @@
       "path": "deploy/helm/svp-cluster"
     },
     {
+      "name": "aws-load-balancer-controller",
+      "namespace": "kube-system",
+      "wave": 1,
+      "repo": "https://aws.github.io/eks-charts",
+      "chart": "aws-load-balancer-controller",
+      "version": "3.6.2",
+      "values": "base/aws-load-balancer-controller.yaml",
+      "platforms": [
+        "eks"
+      ]
+    },
+    {
       "name": "cloudnative-pg",
       "namespace": "cnpg-system",
       "wave": 2,
       "repo": "https://cloudnative-pg.github.io/charts",
       "chart": "cloudnative-pg",
       "version": "0.29.1",
-      "values": "base/cloudnative-pg.yaml"
+      "values": "base/cloudnative-pg.yaml",
+      "platforms": [
+        "k3d"
+      ]
     },
     {
       "name": "keda",
@@ -51,6 +66,18 @@
       "chart": "keda",
       "version": "2.21.0",
       "values": "base/keda.yaml"
+    },
+    {
+      "name": "external-dns",
+      "namespace": "external-dns",
+      "wave": 2,
+      "repo": "https://kubernetes-sigs.github.io/external-dns/",
+      "chart": "external-dns",
+      "version": "1.23.0",
+      "values": "base/external-dns.yaml",
+      "platforms": [
+        "eks"
+      ]
     },
     {
       "name": "argo-rollouts",
@@ -95,7 +122,10 @@
       "repo": "https://cloudnative-pg.github.io/charts",
       "chart": "plugin-barman-cloud",
       "version": "0.8.1",
-      "values": "base/plugin-barman-cloud.yaml"
+      "values": "base/plugin-barman-cloud.yaml",
+      "platforms": [
+        "k3d"
+      ]
     },
     {
       "name": "redpanda",

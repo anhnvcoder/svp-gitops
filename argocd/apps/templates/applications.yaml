@@ -20,7 +20,13 @@ order:
   (value nodeArch): Argo Rollouts' Gateway API plugin is a native binary that the controller downloads and runs, so the
   nodes of a Linux x86_64 host need another file than those of a Mac. The dev path reads the same entry;
 - gitopsOnly marks a component of this path alone, which the dev path skips: External Secrets Operator, which builds
-  the Secrets here from the ExternalSecrets of chart svp-cluster, where the dev path applies them from .env.
+  the Secrets here from the ExternalSecrets of chart svp-cluster, where the dev path applies them from .env;
+- platforms lists the platforms (value platform) a component runs on, every platform when it has none: a component of
+  another platform gets no Application at all. The dev path runs k3d's components;
+- a component of wave 0 gets Pod Security "restricted" on its namespace (managedNamespaceMetadata below), so none goes
+  into kube-system, whose system pods (on EKS the CNI's and kube-proxy's) that would refuse: AWS Load Balancer
+  Controller, which runs there, is in wave 1. On platform eks, envoy-gateway's namespace also gets the label that has
+  that controller give the Envoy pods a readiness gate (below).
 Nothing here names the source Secrets the bootstrap writes into namespace svp-secrets: no chart renders them, so no
 Application tracks them and pruning never deletes them.
 */}}
@@ -143,7 +149,141 @@ repository, which renders every overlay.
 {{- fail (printf "envs/%s/images/%s.yaml is missing: every release of chart svp-service runs the image its environment names" $env .name) }}
 {{- end }}
 {{- end }}
+{{- /*
+The platform's directory. files/platforms is a symlink to platforms/: one directory per platform, k3d (the lab's
+clusters) and eks (Amazon EKS), holding
+- README.md: what the platform is, read by people only;
+- <name>.yaml for each component (its name in components.json) whose values on every cluster of the platform differ
+  from the base, and nothing but those differences, read after the base and before the environment's overlay: one
+  environment runs on both platforms (stg), and its overlay keeps the last word over the platform's. The overlay's
+  rules hold here: no image, canary or httpRoute.name of a release of chart svp-service;
+- <name>.values.tpl for each component that needs what depends on the cluster it runs on (an AWS account, a session):
+  a template, rendered here with tpl on value cluster, which the bootstrap sets from the infrastructure repository's
+  output and git never holds. What it renders becomes helm.valuesObject of the Application, which Argo CD reads after
+  every values file: a template sets only what its cluster decides, which no file of an environment sets. Each value
+  goes in with quote or toJson, never as raw text, so a name or an address cannot change the YAML around it.
+A platform file that names no component of that platform, is no YAML map or sets cluster, a template that renders no
+YAML map, an image or canary key in a service's, a cluster without a key of the contract below, all fail the render.
+*/}}
+{{- $platform := toString (required "platform is not set: the name of a directory of platforms/ (the bootstrap sets k3d or eks)" .Values.platform) }}
+{{- $platforms := list "eks" "k3d" }}
+{{- if not (has $platform $platforms) }}
+{{- fail (printf "platform is %q: the platforms are %s, one directory of platforms/ each" $platform (join ", " $platforms)) }}
+{{- end }}
+{{- $runs := dict }}
 {{- range $components }}
+{{- if hasKey . "platforms" }}
+{{- $listed := .platforms }}
+{{- if or (not (kindIs "slice" $listed)) (not $listed) (ne (len $listed) (len (uniq $listed))) (without $listed "eks" "k3d") }}
+{{- fail (printf "components.json: platforms of %s must list platforms of %s, each once (no platforms: every platform)" .name (join ", " $platforms)) }}
+{{- end }}
+{{- end }}
+{{- if or (not (hasKey . "platforms")) (has $platform .platforms) }}
+{{- $_ := set $runs .name true }}
+{{- end }}
+{{- end }}
+{{- $platformFiles := dict }}
+{{- $platformTemplates := dict }}
+{{- $seen := false }}
+{{- range $file, $content := .Files.Glob (printf "files/platforms/%s/*" $platform) }}
+{{- $base := base $file }}
+{{- $seen = true }}
+{{- if and (not (hasPrefix "." $base)) (ne $base "README.md") }}
+{{- $name := trimSuffix ".yaml" (trimSuffix ".values.tpl" $base) }}
+{{- if or (eq $name $base) (not (hasKey $names $name)) }}
+{{- fail (printf "platforms/%s/%s: a file of a platform is README.md, <name>.yaml or <name>.values.tpl, name a component of components.json" $platform $base) }}
+{{- end }}
+{{- if not (hasKey $runs $name) }}
+{{- fail (printf "platforms/%s/%s: component %s does not run on %s (its platforms in components.json)" $platform $base $name $platform) }}
+{{- end }}
+{{- if hasSuffix ".values.tpl" $base }}
+{{- $_ := set $platformTemplates $name (toString $content) }}
+{{- else }}
+{{- $values := fromYaml (toString $content) }}
+{{- if hasKey $values "Error" }}
+{{- fail (printf "platforms/%s/%s is not a YAML map: %s" $platform $base (get $values "Error")) }}
+{{- end }}
+{{- if hasKey $values "cluster" }}
+{{- fail (printf "platforms/%s/%s sets cluster: what depends on the cluster comes from platforms/%s/%s.values.tpl, rendered on the value the bootstrap sets" $platform $base $platform $name) }}
+{{- end }}
+{{- if eq (get $names $name) "deploy/helm/svp-service" }}
+{{- $route := get $values "httpRoute" }}
+{{- if or (hasKey $values "image") (hasKey $values "canary") (and (kindIs "map" $route) (hasKey $route "name")) }}
+{{- fail (printf "platforms/%s/%s sets image, canary or httpRoute.name: a release's image is envs/<env>/images/%s.yaml, and every platform runs the base's canary" $platform $base $name) }}
+{{- end }}
+{{- end }}
+{{- $_ := set $platformFiles $name (printf "platforms/%s/%s" $platform $base) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if not $seen }}
+{{- fail (printf "platforms/%s/ is missing or empty: every platform has a directory, with a README.md at least" $platform) }}
+{{- end }}
+{{- /*
+The contract of value cluster, the map output cluster_values of the infrastructure repository's Terraform gives, which
+the templates of a platform read (README.md of this repository says what each key is for). Checked before any
+template runs, so a missing key fails here with its name rather than as an empty string in a hostname or a CIDR. A key
+added to the contract is added here, to that output, to the templates and to the example the check of this repository
+renders with (deploy/ci/cluster-values.example.yaml of the code repository).
+*/}}
+{{- $cluster := .Values.cluster | default dict }}
+{{- if not (kindIs "map" $cluster) }}
+{{- fail "cluster is no map: the bootstrap sets it from output cluster_values of the infrastructure repository" }}
+{{- end }}
+{{- if $platformTemplates }}
+{{- $cidr := "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$" }}
+{{- $host := "^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z][a-z0-9-]*[a-z0-9]$" }}
+{{- $shapes := dict
+  "name" "^[a-z][a-z0-9-]*$"
+  "region" "^[a-z]{2}(-[a-z]+)+-[0-9]+$"
+  "vpcId" "^vpc-[0-9a-f]+$"
+  "vpcCidr" $cidr
+  "serviceCidr" "^([0-9]{1,3}\\.){3}0/(1[2-9]|2[0-4])$"
+  "domain" $host
+  "hostedZoneId" "^Z[0-9A-Z]+$"
+  "acmeEmail" "^[^@[:space:]]+@[^@[:space:]]+$"
+  "rdsAddress" $host
+  "uploadsBucket" "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
+  "mediaBucket" "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
+  "mediaDomain" $host }}
+{{- range $key := keys $shapes | sortAlpha }}
+{{- $value := get $cluster $key }}
+{{- if not (and (kindIs "string" $value) (regexMatch (get $shapes $key) $value)) }}
+{{- fail (printf "cluster.%s is %q: want a value of the form %s, from output cluster_values of the infrastructure repository (the bootstrap sets cluster for platform %s)" $key (toString ($value | default "")) (get $shapes $key) $platform) }}
+{{- end }}
+{{- end }}
+{{- range $key := list "dbCidrs" "s3Cidrs" }}
+{{- $value := get $cluster $key }}
+{{- if not (and (kindIs "slice" $value) $value) }}
+{{- fail (printf "cluster.%s is not set: want a list of CIDRs, from output cluster_values of the infrastructure repository (the bootstrap sets cluster for platform %s)" $key $platform) }}
+{{- end }}
+{{- range $value }}
+{{- if not (and (kindIs "string" .) (regexMatch $cidr .)) }}
+{{- fail (printf "cluster.%s holds %q: want a list of CIDRs a.b.c.d/n" $key (toString .)) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $platformObjects := dict }}
+{{- range $name, $template := $platformTemplates }}
+{{- $object := tpl $template $ | fromYaml }}
+{{- if hasKey $object "Error" }}
+{{- fail (printf "platforms/%s/%s.values.tpl does not render a YAML map: %s" $platform $name (get $object "Error")) }}
+{{- end }}
+{{- if eq (get $names $name) "deploy/helm/svp-service" }}
+{{- $route := get $object "httpRoute" }}
+{{- $set := list }}
+{{- if hasKey $object "image" }}{{ $set = append $set "image" }}{{ end }}
+{{- if hasKey $object "canary" }}{{ $set = append $set "canary" }}{{ end }}
+{{- if and (kindIs "map" $route) (hasKey $route "name") }}{{ $set = append $set "httpRoute.name" }}{{ end }}
+{{- if $set }}
+{{- fail (printf "platforms/%s/%s.values.tpl renders %s for %s on %s: a release's image is envs/<env>/images/%s.yaml, and every platform runs the base's canary" $platform $name (join ", " $set) $env $platform $name) }}
+{{- end }}
+{{- end }}
+{{- $_ := set $platformObjects $name $object }}
+{{- end }}
+{{- range $components }}
+{{- if hasKey $runs .name }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -173,15 +313,23 @@ spec:
     {{- end }}
       helm:
         releaseName: {{ .name }}
+        {{- with get $platformObjects .name }}
+        valuesObject:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- $platformFile := get $platformFiles .name }}
         {{- $overlay := get $overlays .name }}
         {{- $image := get $images .name }}
-        {{- if or .values $overlay $image }}
+        {{- if or .values $platformFile $overlay $image }}
         valueFiles:
           {{- if .values }}
           - $values/{{ .values }}
           {{- with .archValues }}{{ with index . $.Values.nodeArch }}
           - $values/{{ . }}
           {{- end }}{{ end }}
+          {{- end }}
+          {{- with $platformFile }}
+          - $values/{{ . }}
           {{- end }}
           {{- with $overlay }}
           - $values/{{ . }}
@@ -196,7 +344,7 @@ spec:
             value: {{ $collectorSum | quote }}
             forceString: true
         {{- end }}
-    {{- if or .values (get $overlays .name) (get $images .name) }}
+    {{- if or .values (get $platformFiles .name) (get $overlays .name) (get $images .name) }}
     - repoURL: {{ $.Values.repoURL }}
       targetRevision: {{ $.Values.targetRevision | quote }}
       ref: values
@@ -247,6 +395,15 @@ spec:
         pod-security.kubernetes.io/warn-version: {{ $podSecurityVersion }}
         pod-security.kubernetes.io/audit: restricted
         pod-security.kubernetes.io/audit-version: {{ $podSecurityVersion }}
+        {{- if and (eq $platform "eks") (eq .name "envoy-gateway") }}
+        # The NLB of AWS Load Balancer Controller sends to the Envoy pods' addresses (target type ip). With this label
+        # the controller's pod webhook gives each new Envoy pod a readiness gate that holds until the NLB reports the
+        # pod's target healthy, so a rollout of Envoy keeps the old pod until the new one takes traffic; without it the
+        # old pod is deregistered while the new target is still in its first health checks, and the entry point refuses
+        # connections meanwhile. The webhook (failurePolicy Ignore) gates only the pods of a target group: Envoy
+        # Gateway's own controller here gets none, and a pod made while the controller is down gets none either.
+        elbv2.k8s.aws/pod-readiness-gate-inject: enabled
+        {{- end }}
     {{- end }}
     syncOptions:
       # A namespace no earlier wave made: wave 0's (with the labels above). Chart svp-cluster (wave 1) makes the
@@ -272,4 +429,5 @@ spec:
         duration: 10s
         factor: 2
         maxDuration: 3m
+{{- end }}
 {{- end }}
