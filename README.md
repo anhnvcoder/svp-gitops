@@ -1,10 +1,10 @@
 # svp-gitops
 
-Cấu hình triển khai của nền tảng video ngắn [short-video-platform](https://github.com/anhnvcoder/short-video-platform): values
+Cấu hình triển khai của nền tảng video ngắn, repo code [svp-backend](https://github.com/anhnvcoder/svp-backend): values
 Helm gốc, khác biệt và bản phát hành của từng môi trường, manifest của Argo CD. Argo CD của mỗi cluster chỉ đọc repo này (và chart
 của repo code ở đúng commit repo này ghim); cái gì chạy ở stg, prd chỉ đổi được qua pull request vào đây. Code, test, Dockerfile, chart
 (`deploy/helm/*`) và CI build, quét, ký image ở repo code; riêng web client build, quét, ký ở repo của nó,
-[svp-web](https://github.com/anhnvcoder/svp-web). Trong lúc chuyển web sang đó, bản web build từ repo code vẫn được nhận; mỗi
+[svp-frontend](https://github.com/anhnvcoder/svp-frontend). Trong lúc chuyển web sang đó, bản web build từ repo code vẫn được nhận; mỗi
 `envs/<env>/images/web.yaml` ghi bản nào đang chạy.
 
 Repo public: **không có secret, token, khoá hay id App nào ở đây**. Values chỉ nêu tên Secret; giá trị nằm ở cluster (lab: `.env` của
@@ -99,7 +99,7 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 ## Ai duyệt gì
 
 - `envs/stg/` (overlay, `charts.yaml`, `images/` của stg) **không có Code Owner**: PR promote stg do bot mở sau mỗi lượt build trên
-  `main`, tự merge khi `gitops-ok` xanh: GitHub App `svp-gitops-promoter` cho repo code, `svp-web-promoter` cho `svp-web`. Check giới hạn
+  `main`, tự merge khi `gitops-ok` xanh: GitHub App `svp-gitops-promoter` cho repo code, `svp-web-promoter` cho `svp-frontend`. Check giới hạn
   file mỗi bot được đổi theo tác giả PR (mục Check).
 - Mọi file khác (`base/`, `envs/prd/`, `argocd/`, `.github/`, file ở gốc) có Code Owner `anhnvcoder` (`CODEOWNERS`): PR do bot hay
   Renovate mở cần người học duyệt; PR của chính người học merge bằng bypass của ruleset `owners` (có bản ghi bypass), check của ruleset
@@ -116,8 +116,8 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 ## Promote
 
 - **stg:** tự động. Job `promote` của `images.yml` (repo code) ghi `envs/stg/images/` của service vừa build và `envs/stg/charts.yaml`
-  (commit của lượt build, không bao giờ lùi) trên nhánh `bot/promote-stg`, mở PR và bật auto-merge. CI của `svp-web` làm như vậy cho
-  riêng `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`; file web đã là bản của `svp-web` thì promote của repo code để nguyên.
+  (commit của lượt build, không bao giờ lùi) trên nhánh `bot/promote-stg`, mở PR và bật auto-merge. CI của `svp-frontend` làm như vậy cho
+  riêng `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`; file web đã là bản của `svp-frontend` thì promote của repo code để nguyên.
 - **prd:** cả bộ. Dispatch promote prd ở repo code nhận một bản ghi triển khai stg (Deployment `stg` trên repo này, ghi sau khi
   phép kiểm trên stg qua) và chép **cả bảy digest cùng `charts.yaml`** của bản ghi đó sang `envs/prd/`; PR do bot mở, người học duyệt.
   Check của PR prd đòi cả bộ khớp payload của một bản ghi stg `success`. Không có promote prd theo từng service.
@@ -132,13 +132,14 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó: render mọi env × nền tảng (stg trên `k3d` và `eks`, prd
 trên `eks`) × kiến trúc node với chart của repo code ở `revision` của env, quy tắc của `charts.yaml` và `images/`, image của chart upstream ghim digest, render prd và nền tảng `eks` không còn
 `svp.localhost`, chữ ký, attestation và provenance của bản phát hành đã đổi. Quy tắc của `images/` theo nguồn phát hành (bảng nguồn của
-chart `svp-policy` ở `revision`): bản của repo code có tag là `revision` hay tổ tiên của nó (image không mới hơn chart); bản của `svp-web`
-có tag là commit trên `main` của `svp-web`, đọc từ bản clone đủ lịch sử mà workflow checkout và chỉ cho check qua `SVP_SOURCE_DIR_WEB`
-(không đặt thì check tự clone ẩn danh). Trên PR do bot mở, mỗi bot chỉ đổi được file image của nguồn mình (bot của repo code thêm
+chart `svp-policy` ở `revision`): bản của repo code có tag là `revision` hay tổ tiên của nó (image không mới hơn chart); bản của `svp-frontend`
+có tag là commit trên `main` của `svp-frontend`, đọc từ bản clone ẩn danh đủ lịch sử (`--filter=blob:none`) mà check tự làm theo URL
+của nguồn trong bảng ở `revision` (bảng cũ ghi URL trước khi đổi tên repo, GitHub chuyển hướng về repo hiện tại; vì vậy workflow không
+checkout repo web và không đặt `SVP_SOURCE_DIR_*`). Trên PR do bot mở, mỗi bot chỉ đổi được file image của nguồn mình (bot của repo code thêm
 `envs/{stg,prd}/charts.yaml` và `envs/prd/images/`), không xoá file nào dưới `envs/`. Chạy trên máy, từ gốc một bản clone đủ lịch sử của repo code:
 
 ```sh
-[SVP_SOURCE_DIR_WEB=<thư mục clone svp-web>] deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]
+deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]
 deploy/ci/gitops-check-test.sh <thư mục clone svp-gitops>
 ```
 
@@ -156,6 +157,6 @@ còn ở repo code):
 | `argocd_chart_version` của `deploy/k8s/gitops.sh` | `argocd/bootstrap.json` |
 | symlink `files/svp-cluster-values.yaml`, `files/otelcol-k8s-config.yaml` | `podSecurityVersion`, `collectorConfigSha256` của `envs/<env>/charts.yaml` |
 
-Thiết kế và lý do: [ADR-0025](https://github.com/anhnvcoder/short-video-platform/blob/main/docs/adr/0025-gitops-config-repo.md),
-[ADR-0024](https://github.com/anhnvcoder/short-video-platform/blob/main/docs/adr/0024-multi-environment.md) §8,
-[ADR-0027](https://github.com/anhnvcoder/short-video-platform/blob/main/docs/adr/0027-slsa-build-provenance.md).
+Thiết kế và lý do: [ADR-0025](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0025-gitops-config-repo.md),
+[ADR-0024](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0024-multi-environment.md) §8,
+[ADR-0027](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0027-slsa-build-provenance.md).

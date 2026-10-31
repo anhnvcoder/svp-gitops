@@ -1,5 +1,5 @@
 # Release web of chart deploy/helm/svp-service: the web client, Next's standalone server, built by the CI of its own
-# repository, svp-web (Dockerfile at its root). While the client moves there, a release built from web/ of the code
+# repository, svp-frontend (Dockerfile at its root). While the client moves there, a release built from web/ of the code
 # repository (deploy/docker/web.Dockerfile) is still admitted: envs/<env>/images/web.yaml names which one runs. Both
 # images take the configuration below.
 protocol: http
