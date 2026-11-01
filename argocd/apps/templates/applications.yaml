@@ -166,7 +166,7 @@ A platform file that names no component of that platform, is no YAML map or sets
 YAML map, an image or canary key in a service's, a cluster without a key of the contract below, all fail the render.
 */}}
 {{- $platform := toString (required "platform is not set: the name of a directory of platforms/ (the bootstrap sets k3d or eks)" .Values.platform) }}
-{{- $platforms := list "eks" "k3d" }}
+{{- $platforms := (.Files.Get "components.json" | fromJson).platforms | keys | sortAlpha }}
 {{- if not (has $platform $platforms) }}
 {{- fail (printf "platform is %q: the platforms are %s, one directory of platforms/ each" $platform (join ", " $platforms)) }}
 {{- end }}
@@ -174,7 +174,7 @@ YAML map, an image or canary key in a service's, a cluster without a key of the 
 {{- range $components }}
 {{- if hasKey . "platforms" }}
 {{- $listed := .platforms }}
-{{- if or (not (kindIs "slice" $listed)) (not $listed) (ne (len $listed) (len (uniq $listed))) (without $listed "eks" "k3d") }}
+{{- if or (not (kindIs "slice" $listed)) (not $listed) (ne (len $listed) (len (uniq $listed))) (ne (len (uniq (concat $listed $platforms))) (len $platforms)) }}
 {{- fail (printf "components.json: platforms of %s must list platforms of %s, each once (no platforms: every platform)" .name (join ", " $platforms)) }}
 {{- end }}
 {{- end }}
