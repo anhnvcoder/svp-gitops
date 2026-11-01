@@ -18,18 +18,17 @@ stg, prd chỉ đổi được qua pull request vào đây. Đọc trước: [`R
 
 ## Quy ước
 
+Quy ước chung (ngôn ngữ, tài liệu timeless, ADR, comment, Git, repo public, phụ thuộc): [`CONTRIBUTING.md` của `anhnvcoder/.github`](https://github.com/anhnvcoder/.github/blob/main/CONTRIBUTING.md); dưới đây chỉ luật riêng của repo này.
+
 - **Repo public: không secret, token, khoá hay id App.** Values chỉ nêu tên Secret; giá trị nằm ở cluster hay AWS Secrets Manager.
   File nào trong git đặt `cluster` thì check đỏ.
-- **Ngôn ngữ viết:** file `.md` viết tiếng Việt; comment trong YAML, mẫu, script viết tiếng Anh, nói lý do ngay tại chỗ, không nhắc ADR.
-- **Không nhãn tiến độ:** code và tài liệu hiện trạng (README, `AGENTS.md`, comment, tên job và bước của workflow) không mang nhãn
-  "giai đoạn N", "phần M"; nói thứ đó làm gì. Lịch sử nằm ở git log và ADR.
+- **Ngôn ngữ viết:** file `.md` viết tiếng Việt.
 - **File bot ghi, không sửa tay:** `envs/stg/images/*.yaml` và `envs/stg/charts.yaml` do bot promote ghi (nhánh `bot/promote-stg`,
   `bot/promote-stg-web`); `envs/prd/images/*.yaml` và `envs/prd/charts.yaml` do promote prd chép từ stg (nhánh `bot/promote-prd`).
   Đổi bản phát hành qua promote, không chép tay.
 - **Code Owner:** mọi file có chủ `anhnvcoder` trừ `envs/stg/` (bot tự merge khi `gitops-ok` xanh); `envs/stg/svp-policy.yaml` vẫn
   có chủ, vì không bot nào được tắt kiểm provenance. PR đụng file có chủ cần người học duyệt.
-- **Git:** conventional commits, mô tả tiếng Việt. Mọi thay đổi vào `main` đi qua PR có `gitops-ok` xanh; không force push, không tạo
-  tag (ruleset `tags` cấm), hoàn tác bằng PR revert.
+- **Git:** mọi thay đổi vào `main` đi qua PR có `gitops-ok` xanh; không tạo tag (ruleset `tags` cấm).
 
 ## Kiểm tra
 
