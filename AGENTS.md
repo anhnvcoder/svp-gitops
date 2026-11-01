@@ -14,7 +14,7 @@ stg, prd chỉ đổi được qua pull request vào đây. Đọc trước: [`R
 - `platforms/<k3d|eks>/`: khác biệt của nền tảng; thứ phụ thuộc account hay buổi là mẫu `*.values.tpl`, không bao giờ là giá trị trong git.
 - `envs/<stg|prd>/`: overlay (chỉ phần khác gốc), `charts.yaml` (commit của repo code mà chart chạy), `images/<svc>.yaml` (bản phát hành).
 - `argocd/`: AppProject, `bootstrap.json`, chart app-of-apps (`apps/`, danh sách component ở `components.json`).
-- `.github/workflows/check.yml`, `.github/rulesets/` (bản để nhập tay), `CODEOWNERS`, `renovate.json`.
+- `.github/workflows/check.yml`, `CODEOWNERS`, `renovate.json`.
 
 ## Quy ước
 

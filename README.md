@@ -30,7 +30,6 @@ argocd/
   bootstrap.json            chart Argo CD: repo, chart, version, values (base/argo-cd.yaml)
   apps/                     chart app-of-apps; components.json là danh sách component
 .github/workflows/check.yml check của mỗi pull request và push main, check tổng gitops-ok
-.github/rulesets/           ruleset main, owners và tags (nhập bằng tay, xem dưới)
 CODEOWNERS, renovate.json
 ```
 
@@ -111,8 +110,8 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 - Ruleset `tags`: mọi tag (`~ALL`) cấm tạo, sửa, xoá, chỉ vai admin bypass (chế độ `always`, chế độ `pull_request` chỉ áp cho ruleset
   nhánh). Repo này không dùng tag; Argo CD phân giải `targetRevision` tên ngắn bằng ref đầu tiên trùng tên, cả tag, nên tag `main` do token
   của App (`contents: write`) bị lộ tạo ra có thể thành bản được deploy.
-- Ba file ở `.github/rulesets/` là bản để nhập (`gh api -X POST repos/anhnvcoder/svp-gitops/rulesets --input .github/rulesets/main.json`),
-  không có hiệu lực khi chỉ nằm trong repo; `actor_id` 5 của `owners.json` và `tags.json` là vai admin của repo, kiểm lại sau khi nhập.
+- Ba ruleset tạo và sửa bằng Terraform ở `github/rulesets.tf` của repo `svp-infra`; `actor_id` 5 của `owners` và `tags` là vai admin của
+  repo, kiểm lại sau mỗi `apply`.
   Schema: [REST API ruleset của repository](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset).
 
 ## Promote
