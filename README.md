@@ -125,8 +125,9 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 - **prd:** cả bộ. Dispatch promote prd ở repo code (`-f promote_prd=true [-f stg_ref=<main|SHA đủ 40 hex>]`) nhận `stg_ref`, `main` hay
   một commit trên `main` của repo này, và chép **giá trị khối `image` của cả bảy file `envs/stg/images/` cùng ba khoá của
   `envs/stg/charts.yaml`** ở commit đó sang cùng file dưới `envs/prd/` (comment của file prd giữ nguyên), trên nhánh `bot/promote-prd`;
-  PR không auto-merge, người học (Code Owner) duyệt. Không có bản ghi triển khai stg: `stg_ref` chỉ bảo đảm bộ đó từng nằm trên `main` của
-  `envs/stg/`, không bảo đảm stg đã chạy và smoke qua với đúng bộ đó; cổng là lượt duyệt. Không có promote prd theo từng service.
+  PR không auto-merge. Cổng vào prd là hai bước: người học duyệt environment `promote-prd` của `svp-backend` (admin không bypass, trước khi
+  job lấy khoá App), rồi người học (Code Owner) duyệt PR prd ở đây. Không có bản ghi triển khai stg: `stg_ref` chỉ bảo đảm bộ đó từng nằm trên
+  `main` của `envs/stg/`, không bảo đảm stg đã chạy và smoke qua với đúng bộ đó; cổng là hai lượt duyệt. Không có promote prd theo từng service.
 - **Rollback prd:** dispatch promote prd với `stg_ref` là một commit cũ hơn trên `main` (attestation `vuln` quá 48 giờ thì rescan trước).
 - **Ngoại lệ khởi tạo:** ở commit đầu, `envs/prd/images/` và `envs/prd/charts.yaml` là đúng bộ của `envs/stg/` (bảy bản phát hành
   build ở `6ca2d8a795dd`, chart ở commit `main` của repo code lúc tách). Sau đó `envs/prd/` đổi bằng promote prd.
