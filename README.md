@@ -4,8 +4,7 @@ Cấu hình triển khai của nền tảng video ngắn, repo code [svp-backend
 Helm gốc, khác biệt và bản phát hành của từng môi trường, manifest của Argo CD. Argo CD của mỗi cluster chỉ đọc repo này (và chart
 của repo code ở đúng commit repo này ghim); cái gì chạy ở stg, prd chỉ đổi được qua pull request vào đây. Code, test, Dockerfile, chart
 (`deploy/helm/*`) và CI build, quét, ký image ở repo code; riêng web client build, quét, ký ở repo của nó,
-[svp-frontend](https://github.com/anhnvcoder/svp-frontend). Trong lúc chuyển web sang đó, bản web build từ repo code vẫn được nhận; mỗi
-`envs/<env>/images/web.yaml` ghi bản nào đang chạy.
+[svp-frontend](https://github.com/anhnvcoder/svp-frontend). Mỗi `envs/<env>/images/web.yaml` ghi bản nào đang chạy.
 
 Repo public: **không có secret, token, khoá hay id App nào ở đây**. Values chỉ nêu tên Secret; giá trị nằm ở cluster (lab: `.env` của
 máy chạy, qua External Secrets Operator) hay ở AWS Secrets Manager (prd).
@@ -46,14 +45,14 @@ không component nào được mang.
 
 ## Lớp nền tảng
 
-Một env chạy trên nhiều nền tảng: stg chạy ở cluster lab `k3d` (cluster GitOps của repo code, runner của `verify.yml`, nơi ghi bản ghi stg)
+Một env chạy trên nhiều nền tảng: stg chạy ở cluster lab `k3d` (cluster GitOps của repo code, runner của `verify.yml`)
 và ở Amazon EKS (`eks`, giai đoạn 7); prd chỉ chạy trên `eks`. Khác biệt giữa hai nền tảng nằm ở `platforms/`, không ở `envs/`, nên
 `envs/stg/` (bản phát hành, `charts.yaml`, overlay) dùng chung cho cả hai và promote prd không đổi.
 
 - Root nhận giá trị `platform` (`k3d` | `eks`, bắt buộc, không mặc định, như `env`); bootstrap đặt (`deploy/k8s/gitops.sh` của repo code).
 - Khoá `platforms` đầu `components.json` (ngoài danh sách `components`): mỗi nền tảng nêu `envs` (env chạy trên nền tảng đó: `k3d` chỉ `stg`,
   `eks` cả `stg` và `prd`) và `localHosts: true` khi render của nó được nêu tên lab `*.svp.localhost` (chỉ `k3d`; vắng là không được). Root
-  chart không đọc khoá này; check của repo code đọc nó (từ bản checker sau, thay cho danh sách ghi cứng `stg:k3d stg:eks prd:eks`).
+  chart không đọc khoá này; check của repo code đọc nó (thiếu hay sai dạng là đỏ), job `diff-preview` cũng render theo nó.
 - Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
   `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `aws-load-balancer-controller` (NLB trước Envoy từ Service
   của Envoy, wave 1 vì Gateway `svp` chỉ `Programmed` khi Service có địa chỉ), `external-dns` (bản ghi Route 53 cho host của HTTPRoute gắn
@@ -118,33 +117,59 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 
 ## Promote
 
-- **stg:** tự động. Job `promote` của `images.yml` (repo code) ghi `envs/stg/images/` của service vừa build và `envs/stg/charts.yaml`
-  (commit của lượt build, không bao giờ lùi) trên nhánh `bot/promote-stg`, mở PR và bật auto-merge. CI của `svp-frontend` làm như vậy cho
-  riêng `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`; file web đã là bản của `svp-frontend` thì promote của repo code để nguyên.
-- **prd:** cả bộ. Dispatch promote prd ở repo code nhận một bản ghi triển khai stg (Deployment `stg` trên repo này, ghi sau khi
-  phép kiểm trên stg qua) và chép **cả bảy digest cùng `charts.yaml`** của bản ghi đó sang `envs/prd/`; PR do bot mở, người học duyệt.
-  Check của PR prd đòi cả bộ khớp payload của một bản ghi stg `success`. Không có promote prd theo từng service.
-- **Rollback prd:** dispatch promote prd với một bản ghi stg cũ hơn (attestation `vuln` quá 48 giờ thì rescan trước).
+- **stg:** tự động. Job `promote` của `images.yml` (repo code, bước shell của workflow) ghi khối `image` của `envs/stg/images/` cho mỗi
+  service vừa ký ở lượt đó (sáu service Go của repo code) và `envs/stg/charts.yaml` (commit của lượt build; lượt có commit là tổ tiên thật
+  của `revision` đang có bị từ chối, nên chart không lùi) trên nhánh `bot/promote-stg`, mở hay cập nhật PR và bật auto-merge. CI của
+  `svp-frontend` làm như vậy cho riêng `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`.
+- **prd:** cả bộ. Dispatch promote prd ở repo code (`-f promote_prd=true [-f stg_ref=<main|SHA đủ 40 hex>]`) nhận `stg_ref`, `main` hay
+  một commit trên `main` của repo này, và chép **giá trị khối `image` của cả bảy file `envs/stg/images/` cùng ba khoá của
+  `envs/stg/charts.yaml`** ở commit đó sang cùng file dưới `envs/prd/` (comment của file prd giữ nguyên), trên nhánh `bot/promote-prd`;
+  PR không auto-merge, người học (Code Owner) duyệt. Không có bản ghi triển khai stg: `stg_ref` chỉ bảo đảm bộ đó từng nằm trên `main` của
+  `envs/stg/`, không bảo đảm stg đã chạy và smoke qua với đúng bộ đó; cổng là lượt duyệt. Không có promote prd theo từng service.
+- **Rollback prd:** dispatch promote prd với `stg_ref` là một commit cũ hơn trên `main` (attestation `vuln` quá 48 giờ thì rescan trước).
 - **Ngoại lệ khởi tạo:** ở commit đầu, `envs/prd/images/` và `envs/prd/charts.yaml` là đúng bộ của `envs/stg/` (bảy bản phát hành
-  build ở `6ca2d8a795dd`, chart ở commit `main` của repo code lúc tách), vì khi đó chưa có bản ghi stg nào để chép từ. Từ lần promote prd
-  đầu tiên, `envs/prd/` chỉ đổi theo bản ghi stg.
+  build ở `6ca2d8a795dd`, chart ở commit `main` của repo code lúc tách). Sau đó `envs/prd/` đổi bằng promote prd.
 
 ## Check
 
 `.github/workflows/check.yml` checkout repo này và repo code ở `CHECKER_COMMIT` (ghim trong chính workflow, đổi bằng PR có Code Owner;
-Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó: render mọi env × nền tảng (stg trên `k3d` và `eks`, prd
-trên `eks`) × kiến trúc node với chart của repo code ở `revision` của env, quy tắc của `charts.yaml` và `images/`, image của chart upstream ghim digest, render prd và nền tảng `eks` không còn
-`svp.localhost`, chữ ký, attestation và provenance của bản phát hành đã đổi. Quy tắc của `images/` theo nguồn phát hành (bảng nguồn của
-chart `svp-policy` ở `revision`): bản của repo code có tag là `revision` hay tổ tiên của nó (image không mới hơn chart); bản của `svp-frontend`
-có tag là commit trên `main` của `svp-frontend`, đọc từ bản clone ẩn danh đủ lịch sử (`--filter=blob:none`) mà check tự làm theo URL
-của nguồn trong bảng ở `revision` (bảng cũ ghi URL trước khi đổi tên repo, GitHub chuyển hướng về repo hiện tại; vì vậy workflow không
-checkout repo web và không đặt `SVP_SOURCE_DIR_*`). Trên PR do bot mở, mỗi bot chỉ đổi được file image của nguồn mình (bot của repo code thêm
-`envs/{stg,prd}/charts.yaml` và `envs/prd/images/`), không xoá file nào dưới `envs/`. Chạy trên máy, từ gốc một bản clone đủ lịch sử của repo code:
+Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó (job `gitops`, chỉ quyền `contents: read`, không secret,
+check tổng `gitops-ok`):
+
+1. Cây: `envs/` đúng stg và prd; `charts.yaml` đúng ba khoá, `revision` là commit trên `main` của repo code, hai giá trị dẫn xuất tính lại
+   từ commit đó; mỗi `envs/<env>/images/<svc>.yaml` chỉ khối `image`, repository là `<imagePrefix><svc>` của một nguồn phát hành có `<svc>`
+   trong bảng nguồn (`sources.json` của chart `svp-policy`) ở `revision` của env; lớp nền tảng theo khoá `platforms` của `components.json`.
+   Luật tác giả hẹp, viết từ bảng nguồn: PR của bot `<promoter>[bot]` một nguồn chỉ đổi `envs/{stg,prd}/images/<svc>.yaml` với `<svc>` của
+   nguồn đó; bot của repo code đổi thêm `envs/{stg,prd}/charts.yaml` và mọi file `envs/prd/images/` (promote prd chép cả bộ, web gồm);
+   không bot nào xoá file; bot khác (Renovate) không đổi gì dưới `envs/`. PR của người không bị giới hạn ở đây (Code Owner duyệt).
+2. Render root `argocd/apps` theo env × nền tảng của khoá `platforms` × kiến trúc node; mọi `targetRevision` vào repo này là tên đầy đủ.
+3. Render chart của repo code ở `revision` của env với `base/`, `platforms/` và overlay; External Secrets qua kubeconform; render của nền
+   tảng không `localHosts` không nêu `svp.localhost`.
+4. Mọi image ghim digest (policy Kyverno CLI `images-pinned`); overlay không đổi version image của render nó chồng lên.
+5. File image đổi so với base: chữ ký, attestation `vuln`, provenance env đòi; có provenance thì tag là 12 hex của commit nó nêu.
+
+Không so bản ghi stg, không luật tổ tiên (tag image không cần là tổ tiên của `revision`), không clone `svp-frontend`. Chạy trên máy, từ gốc
+một bản clone đủ lịch sử của repo code (`origin/main` đã fetch):
 
 ```sh
 deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]
 deploy/ci/gitops-check-test.sh <thư mục clone svp-gitops>
 ```
+
+### Diff preview
+
+Job `diff-preview` của cùng workflow, chỉ ở PR, **ngoài `gitops-ok`** (đỏ không chặn merge), quyền `contents: read`, không secret, không
+comment vào PR: chạy [argocd-diff-preview](https://github.com/dag-andersen/argocd-diff-preview) (image ghim tag + digest, Renovate theo dõi,
+chạy bằng `docker run` vì repo chỉ cho action của GitHub). Root ở đây là chart Helm nên job render root của mỗi env trên mỗi nền tảng của
+khoá `platforms` (node amd64; `cluster` của `eks` là fixture `deploy/ci/cluster-values.example.yaml` của commit checker) cho hai phía: commit
+merge của PR và cha đầu của nó (nhánh base lúc merge). Tên mỗi Application mang tiền tố `<env>-<nền tảng>-` (`stg-k3d-gateway`,
+`prd-eks-gateway`): ba root cùng tên component. Công cụ dựng cluster kind tạm trên runner, cài Argo CD theo chart và version của
+`argocd/bootstrap.json`, trỏ nguồn values của repo này sang commit của từng phía (phía PR là `refs/pull/<số>/merge`), giữ nguyên nguồn
+chart (chart upstream, chart repo code ở `revision`), rồi lấy manifest Argo CD render; mọi repo đọc ẩn danh qua HTTPS như trên cluster.
+
+Đọc kết quả: tóm tắt của job `diff-preview` (trang lượt chạy, mục Summary) là diff manifest theo Application, chỉ Application có manifest
+đổi; đổi `base/` hiện ở mọi env và nền tảng đọc file đó, đổi overlay hay file image chỉ ở env đó. Không có diff khi bước công cụ lỗi: đọc log
+của bước `argocd-diff-preview` (Application không render được nêu tên ở đó). Diff dài hơn 65 536 ký tự bị cắt.
 
 ## Nguồn gốc
 

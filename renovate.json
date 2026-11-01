@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": [
-    "Dependency updates of the deployment configuration through the Mend Renovate GitHub App: the upstream charts of argocd/apps/components.json and of argocd/bootstrap.json, the image pins of base/, the actions of .github/workflows/ and the commit of the code repository whose checker the workflow runs.",
+    "Dependency updates of the deployment configuration through the Mend Renovate GitHub App: the upstream charts of argocd/apps/components.json and of argocd/bootstrap.json, the image pins of base/, the actions of .github/workflows/, the images the workflows run with docker and the commit of the code repository whose checker the workflow runs.",
     "Every update is a pull request a code owner reads and merges by hand: no automerge. A release is proposed only once it is 3 days old, because a hijacked release is usually pulled within hours (trivy, March 2026); vulnerability alerts skip that wait and the schedule.",
     "envs/ is left alone: its images belong to the promote pull requests, its overlays and charts.yaml to people. An update of base/ reaches stg and prd together."
   ],
@@ -94,6 +94,16 @@
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)[ \\t]*\\n[ \\t]*[A-Z_]+:[ \\t]*(?<currentDigest>[0-9a-f]{40})[ \\t]*\\n"
+      ]
+    },
+    {
+      "description": "Images the workflows run with docker (ARGOCD_DIFF_PREVIEW_IMAGE of check.yml), with a '# renovate: datasource=docker depName=<image>' line right above '<KEY>: <image>:<tag>@sha256:<digest>': tag and digest move together.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "#[ \\t]*renovate:[ \\t]*datasource=(?<datasource>docker)[ \\t]+depName=(?<depName>\\S+)[ \\t]*\\n[ \\t]*[A-Z_]+:[ \\t]*[^\\s:@]+:(?<currentValue>[^\\s@]+)@(?<currentDigest>sha256:[0-9a-f]{64})[ \\t]*\\n"
       ]
     }
   ],
