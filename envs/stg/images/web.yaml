@@ -4,5 +4,5 @@
 # envs/stg/web.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-frontend/web
-  tag: "d0ce81f1edcc"
-  digest: "sha256:f4404dc3b032b12d5be7f3d821127af6fd85dee6289cd5c6c596c504f7e643c4"
+  tag: "0eefa5afae2b"
+  digest: "sha256:e4ec95aaf4c3c069a3f877bb490d06120f165ca5febdc462468c69a4d04e73be"
