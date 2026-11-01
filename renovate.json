@@ -97,7 +97,7 @@
       ]
     },
     {
-      "description": "Images the workflows run with docker (ARGOCD_DIFF_PREVIEW_IMAGE of check.yml), with a '# renovate: datasource=docker depName=<image>' line right above '<KEY>: <image>:<tag>@sha256:<digest>': tag and digest move together.",
+      "description": "Images the workflows run with docker (ZIZMOR_IMAGE, ARGOCD_DIFF_PREVIEW_IMAGE of check.yml), with a '# renovate: datasource=docker depName=<image>' line right above '<KEY>: <image>:<tag>@sha256:<digest>': tag and digest move together.",
       "customType": "regex",
       "managerFilePatterns": [
         "/^\\.github/workflows/[^/]+\\.ya?ml$/"

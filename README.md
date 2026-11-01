@@ -30,6 +30,8 @@ argocd/
   bootstrap.json            chart Argo CD: repo, chart, version, values (base/argo-cd.yaml)
   apps/                     chart app-of-apps; components.json là danh sách component
 .github/workflows/check.yml check của mỗi pull request và push main, check tổng gitops-ok
+.github/workflows/pr-title.yml  tiêu đề PR theo Conventional Commits (mục Tiêu đề PR)
+.github/workflows/scorecard.yml OpenSSF Scorecard của repo (mục Check)
 CODEOWNERS, renovate.json
 ```
 
@@ -105,8 +107,8 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 - Mọi file khác (`base/`, `envs/prd/`, `argocd/`, `.github/`, file ở gốc) có Code Owner `anhnvcoder` (`CODEOWNERS`): PR do bot hay
   Renovate mở cần người học duyệt; PR của chính người học merge bằng bypass của ruleset `owners` (có bản ghi bypass), check của ruleset
   `main` vẫn bắt buộc.
-- Ruleset `main`: cấm xoá và force push nhánh mặc định, mọi thay đổi qua PR, check bắt buộc `gitops-ok` của app GitHub Actions, không
-  ai bypass. Ruleset `owners`: PR đổi file có chủ phải được Code Owner duyệt; vai admin bypass ở chế độ `pull_request`.
+- Ruleset `main`: cấm xoá và force push nhánh mặc định, mọi thay đổi qua PR, chỉ squash merge, lịch sử thẳng, check bắt buộc
+  `gitops-ok` của app GitHub Actions, không ai bypass. Ruleset `owners`: PR đổi file có chủ phải được Code Owner duyệt; vai admin bypass ở chế độ `pull_request`.
 - Ruleset `tags`: mọi tag (`~ALL`) cấm tạo, sửa, xoá, chỉ vai admin bypass (chế độ `always`, chế độ `pull_request` chỉ áp cho ruleset
   nhánh). Repo này không dùng tag; Argo CD phân giải `targetRevision` tên ngắn bằng ref đầu tiên trùng tên, cả tag, nên tag `main` do token
   của App (`contents: write`) bị lộ tạo ra có thể thành bản được deploy.
@@ -159,7 +161,7 @@ deploy/ci/gitops-check-test.sh <thư mục clone svp-gitops>
 
 Job `diff-preview` của cùng workflow, chỉ ở PR, **ngoài `gitops-ok`** (đỏ không chặn merge), quyền `contents: read`, không secret, không
 comment vào PR: chạy [argocd-diff-preview](https://github.com/dag-andersen/argocd-diff-preview) (image ghim tag + digest, Renovate theo dõi,
-chạy bằng `docker run` vì repo chỉ cho action của GitHub). Root ở đây là chart Helm nên job render root của mỗi env trên mỗi nền tảng của
+chạy bằng `docker run`, để mọi action của workflow này là của GitHub). Root ở đây là chart Helm nên job render root của mỗi env trên mỗi nền tảng của
 khoá `platforms` (node amd64; `cluster` của `eks` là fixture `deploy/ci/cluster-values.example.yaml` của commit checker) cho hai phía: commit
 merge của PR và cha đầu của nó (nhánh base lúc merge). Tên mỗi Application mang tiền tố `<env>-<nền tảng>-` (`stg-k3d-gateway`,
 `prd-eks-gateway`): ba root cùng tên component. Công cụ dựng cluster kind tạm trên runner, cài Argo CD theo chart và version của
@@ -169,6 +171,42 @@ chart (chart upstream, chart repo code ở `revision`), rồi lấy manifest Arg
 Đọc kết quả: tóm tắt của job `diff-preview` (trang lượt chạy, mục Summary) là diff manifest theo Application, chỉ Application có manifest
 đổi; đổi `base/` hiện ở mọi env và nền tảng đọc file đó, đổi overlay hay file image chỉ ở env đó. Không có diff khi bước công cụ lỗi: đọc log
 của bước `argocd-diff-preview` (Application không render được nêu tên ở đó). Diff dài hơn 65 536 ký tự bị cắt.
+
+### zizmor
+
+Job `zizmor` của cùng workflow, **trong `gitops-ok`**, chạy cả ở PR của bot: lint bảo mật workflow bằng
+[zizmor](https://docs.zizmor.sh/) từ image chính thức ghim tag + digest (`ZIZMOR_IMAGE` trong `env` của `check.yml`, Renovate theo dõi),
+`--persona=regular` trên cả repo như repo code chạy (`make zizmor` ở đó), mọi finding là đỏ và hiện thành annotation trên PR. Token
+`GITHUB_TOKEN` chỉ đọc của job bật các audit online (commit mạo danh, action có lỗ hổng). Finding giữ có chủ đích ghi ở
+`.github/zizmor.yml` (`rules.<id>.ignore`), mỗi mục một comment lý do; hiện chưa có mục nào nên chưa có file. Trên máy chỉ chạy offline,
+không token:
+
+```sh
+env -u DOCKER_DEFAULT_PLATFORM docker run --rm --user "$(id -u):$(id -g)" --env=ZIZMOR_OFFLINE=true --network=none \
+  -v "$PWD:/src:ro" --workdir /src "$(sed -n 's/^  ZIZMOR_IMAGE: //p' .github/workflows/check.yml)" \
+  --persona=regular --no-progress --color=never --cache-dir /tmp/zizmor .
+```
+
+### Scorecard
+
+`.github/workflows/scorecard.yml` chạy [OpenSSF Scorecard](https://github.com/ossf/scorecard) khi push `main`, hằng tuần và khi luật bảo
+vệ nhánh kiểu cũ đổi; không phải check của PR. Kết quả công khai ở API Scorecard
+([viewer](https://scorecard.dev/viewer/?uri=github.com/anhnvcoder/svp-gitops)) và vào code scanning. Check Code-Review luôn thấp (lab một
+người, PR không đòi duyệt): ngoại lệ có chủ đích. Muốn API nhận kết quả thì file theo luật "Workflow Restrictions" ghi ở đầu file.
+
+## Tiêu đề PR
+
+`main` chỉ nhận squash merge nên tiêu đề PR thành tiêu đề commit. Workflow `pr-title.yml` (job `pr-title`, tách khỏi `check.yml` để sửa
+tiêu đề không chạy lại check, không quyền, không checkout) kiểm tiêu đề theo [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+bằng regex của bash, chung cho bốn repo có CI:
+
+```text
+^(feat|fix|chore|docs|refactor|test|ci|build|perf|revert)(\([^)]+\))?!?: .+|^Revert ".+"$
+```
+
+Ngữ pháp, không danh sách scope: tiêu đề của bot qua nguyên dạng (`chore(stg): …` của PR promote stg, `chore(prd): …` của promote prd,
+`chore(deps): …`, `fix(deps): …` của Renovate), PR revert của stg cũng vậy (nút Revert của GitHub cho `Revert "<tiêu đề>"`, hay
+`revert: <tiêu đề>`). Bộ tiêu đề thử đạt và hỏng chạy trước tiêu đề của PR ở mỗi lượt, nên regex hỏng thì mọi PR đỏ.
 
 ## Nguồn gốc
 
