@@ -186,4 +186,4 @@ còn ở repo code):
 
 Thiết kế và lý do: [ADR-0025](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0025-gitops-config-repo.md),
 [ADR-0024](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0024-multi-environment.md) §8,
-[ADR-0027](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0027-slsa-build-provenance.md).
+[ADR-0040](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0040-sigstore-bundle-actions-attest.md) (chữ ký, attestation, provenance).
