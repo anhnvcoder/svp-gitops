@@ -6,8 +6,8 @@
 #
 # The repository is public and a pull request from a fork runs this workflow with the fork's tree, so:
 # - no pull_request_target and no workflow_run: a pull request never runs with a write token or with secrets;
-# - the job reads only: contents (the two checkouts) and deployments (the stg deployment records a pull request to
-#   envs/prd/ is compared with);
+# - every job reads only: contents (the checkouts); no job has a secret, and job diff-preview reads both repositories
+#   and the chart repositories anonymously;
 # - every action is GitHub's own and pinned to a full commit SHA: a tag moved to other code changes nothing here;
 # - checkout never leaves the token in .git/config (persist-credentials: false);
 # - values an outsider controls (branch names, titles) never go into a script through ${{ }}: only through env.
@@ -32,7 +32,7 @@ env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
-  CHECKER_COMMIT: 344da5f7a602e74c5c02efdafb3e25064fea2e1c
+  CHECKER_COMMIT: 9d4a73a2708afe8d294c26ec5d05d8c454f12082
 
 jobs:
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
@@ -43,10 +43,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      deployments: read
     steps:
-      # The whole history of both: the base commit below, the revisions of envs/*/charts.yaml and the commits of the
-      # image tags are read from it.
+      # The whole history of both: the base commit below and the revisions of envs/*/charts.yaml (each on main of the
+      # code repository) are read from it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: gitops
@@ -75,13 +74,6 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
-          # Reads the deployment records of stg in this repository (deployments: read above), which a change of
-          # envs/prd/ must match whole; the job's own token, read-only.
-          GH_TOKEN: ${{ github.token }}
-        # No SVP_SOURCE_DIR_*: the checker clones the repository of every other release source itself, anonymously,
-        # from the URL the table of release sources at each environment's revision gives. A renamed repository has its
-        # old URL in an older table and its new URL in a newer one, and one checkout has one origin, so a checkout here
-        # would fit one of them only; GitHub redirects the old URL to the repository.
         run: |
           case "$EVENT_NAME" in
             pull_request) base=$(git -C gitops merge-base HEAD "origin/$GITHUB_BASE_REF") ;;
@@ -90,6 +82,122 @@ jobs:
           esac
           echo "base: ${base:-none, every image file}"
           code/deploy/ci/gitops-check.sh gitops "$base"
+
+  # A preview, not a check: what the Applications of a pull request render to, next to what main renders, with Argo CD
+  # itself (argocd-diff-preview), as a diff per Application in the job's summary. Outside gitops-ok, so it never blocks
+  # a merge, and it comments nothing on the pull request (that would need a write token). It runs only for a pull
+  # request: a push to main has nothing to compare with.
+  #
+  # The root here is a Helm chart (argocd/apps), not Application manifests in files, so the job renders the root of
+  # each environment on each platform the key platforms of components.json lists, for both sides (the merge commit and
+  # its first parent, the base it was merged onto), on amd64 nodes (architecture changes only the traffic router plugin
+  # of Argo Rollouts), with the same values the bootstrap sets: env, platform, nodeArch, and on eks cluster from the
+  # fixture of the checker commit. Each Application gets its environment and platform in front of its name
+  # (stg-k3d-gateway): the three roots make Applications of one name, which the tool would otherwise number in the
+  # order of the files. The tool then creates a kind cluster through the runner's docker, installs Argo CD from the
+  # chart and version argocd/bootstrap.json pins, points every source of this repository (the values, ref values) at
+  # the side's commit, leaves the chart sources (upstream charts, the code repository at each revision) as they are,
+  # and asks Argo CD for the manifests. Every repository is public and read anonymously, as on a cluster.
+  diff-preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      # argocd-diff-preview from its official image pinned by digest, run with docker: this repository allows GitHub's
+      # own actions only.
+      # renovate: datasource=docker depName=dagandersen/argocd-diff-preview
+      ARGOCD_DIFF_PREVIEW_IMAGE: dagandersen/argocd-diff-preview:v0.2.17@sha256:ea90848df29337b50d5058330210b38e39232360b78d9c60951fc92e454c6941
+    steps:
+      # The merge commit of the pull request and its first parent.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: gitops
+          fetch-depth: 2
+          persist-credentials: false
+      # The checker commit: its Makefile pins Helm and yq, its deploy/ci/cluster-values.example.yaml is the value
+      # cluster of the platform eks.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: anhnvcoder/svp-backend
+          ref: ${{ env.CHECKER_COMMIT }}
+          path: code
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: code/go.mod
+          cache-dependency-path: code/go.sum
+      - run: make -C code ci-tools
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      # preview/base-branch and preview/target-branch, the folders the tool reads: one file per environment and
+      # platform, <env>-<platform>.yaml, the root's Applications renamed with yq of the checker's Makefile.
+      - name: Render the root for both sides
+        id: render
+        run: |
+          set -euo pipefail
+          yq_image=$(sed -n 's/^YQ_IMAGE[[:space:]]*:=[[:space:]]*//p' code/Makefile)
+          [[ $yq_image == *@sha256:* ]] || { echo "::error::YQ_IMAGE is not pinned by digest in the checker's Makefile"; exit 1; }
+          mkdir gitops-base
+          git -C gitops archive HEAD^1 | tar -x -C gitops-base
+          { echo 'cluster:'; sed 's/^/  /' code/deploy/ci/cluster-values.example.yaml; } >cluster.yaml
+          render() { # TREE FOLDER
+            local tree=$1 out=$2 target targets env plat args
+            mkdir -p "$out"
+            # Read first: a jq failure inside the list of a for loop would not stop the step under set -e.
+            targets=$(jq -er '.platforms | to_entries[] | .key as $p | .value.envs[] | "\(.):\($p)"' \
+              "$tree/argocd/apps/components.json")
+            for target in $targets; do
+              [[ $target =~ ^[a-z0-9-]+:[a-z0-9-]+$ ]] ||
+                { echo "::error::$tree: key platforms of components.json names '$target'"; exit 1; }
+              env=${target%%:*} plat=${target#*:}
+              args=(--namespace argocd --set-string "env=$env" --set nodeArch=amd64 --set-string "platform=$plat")
+              [ "$plat" != eks ] || args+=(-f cluster.yaml)
+              helm template svp-root "$tree/argocd/apps" "${args[@]}" >root.yaml 2>err || {
+                grep -v 'found symbolic link in path' err >&2
+                echo "::error::helm template of argocd/apps ($tree) for $env on $plat"
+                exit 1
+              }
+              docker run --rm -i --network none -e "PREFIX=$env-$plat" "$yq_image" \
+                'with(select(.kind == "Application"); .metadata.name = strenv(PREFIX) + "-" + .metadata.name)' \
+                <root.yaml >"$out/$env-$plat.yaml"
+              echo "$out/$env-$plat.yaml: $(grep -c '^kind: Application$' "$out/$env-$plat.yaml") Applications"
+            done
+          }
+          render gitops-base preview/base-branch
+          render gitops preview/target-branch
+          echo "base=$(git -C gitops rev-parse HEAD^1)" >>"$GITHUB_OUTPUT"
+      # The base side reads this repository at the first parent (a commit of the base branch), the pull request's side
+      # at refs/pull/<number>/merge, the ref GitHub keeps for it (also for a pull request from a fork).
+      - name: argocd-diff-preview
+        env:
+          BASE: ${{ steps.render.outputs.base }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          mkdir -p preview/output
+          docker run --rm --network=host \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/preview/base-branch:/base-branch:ro" \
+            -v "$PWD/preview/target-branch:/target-branch:ro" \
+            -v "$PWD/preview/output:/output" \
+            -e REPO="$GITHUB_REPOSITORY" \
+            -e BASE_BRANCH="$BASE" \
+            -e TARGET_BRANCH="refs/pull/$PR_NUMBER/merge" \
+            -e ARGOCD_CHART_URL="$(jq -r .repo gitops/argocd/bootstrap.json)" \
+            -e ARGOCD_CHART_VERSION="$(jq -r .version gitops/argocd/bootstrap.json)" \
+            -e OUTPUT_FOLDER=/output \
+            -e TIMEOUT=900 \
+            -e TITLE="Argo CD diff preview (<env>-<platform>-<component>, amd64 nodes)" \
+            "$ARGOCD_DIFF_PREVIEW_IMAGE"
+      - name: Summary
+        if: always()
+        run: |
+          if [ -s preview/output/diff.md ]; then
+            cat preview/output/diff.md >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "No diff: argocd-diff-preview did not finish (see its step's log)." >>"$GITHUB_STEP_SUMMARY"
+          fi
 
   gitops-ok:
     needs: [gitops]
