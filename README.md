@@ -112,7 +112,7 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
   của App (`contents: write`) bị lộ tạo ra có thể thành bản được deploy.
 - Ba ruleset tạo và sửa bằng Terraform ở `github/rulesets.tf` của repo `svp-infra`; `actor_id` 5 của `owners` và `tags` là vai admin của
   repo, kiểm lại sau mỗi `apply`.
-  Schema: [REST API ruleset của repository](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset).
+  Resource: [`github_repository_ruleset`](https://registry.terraform.io/providers/integrations/github/latest/docs/resources/repository_ruleset).
 
 ## Promote
 
