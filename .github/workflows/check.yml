@@ -1,13 +1,14 @@
 # Check of every pull request and of every push to main of this repository: deploy/ci/gitops-check.sh of the code
 # repository (https://github.com/anhnvcoder/svp-backend), at the commit CHECKER_COMMIT below, on this tree. The
 # logic is that script's alone, so it runs the same on a machine against a clone; a pull request here cannot change
-# what checks it except by changing this file, which has a code owner. Job gitops-ok is the only check the ruleset of
-# main requires, so the jobs before it can be renamed or added without touching the ruleset.
+# what checks it except by changing this file, which has a code owner. Job gitops-ok is the only check of this workflow
+# the ruleset of main requires, so the jobs before it can be renamed or added without touching the ruleset.
 #
 # The repository is public and a pull request from a fork runs this workflow with the fork's tree, so:
 # - no pull_request_target and no workflow_run: a pull request never runs with a write token or with secrets;
-# - every job reads only: contents (the checkouts); no job has a secret, and job diff-preview reads both repositories
-#   and the chart repositories anonymously;
+# - every job reads only: contents (the checkouts); no job has a secret (job zizmor hands its read-only GITHUB_TOKEN to
+#   zizmor, which reads public data with it), and job diff-preview reads both repositories and the chart repositories
+#   anonymously;
 # - every action is GitHub's own and pinned to a full commit SHA: a tag moved to other code changes nothing here;
 # - checkout never leaves the token in .git/config (persist-credentials: false);
 # - values an outsider controls (branch names, titles) never go into a script through ${{ }}: only through env.
@@ -29,6 +30,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  # zizmor from its official image pinned by digest (multi-arch: the same reference on an arm64 machine and an amd64
+  # runner), run with docker rather than as a third-party action: every action of this workflow is GitHub's own.
+  # renovate: datasource=docker depName=ghcr.io/zizmorcore/zizmor
+  ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
@@ -83,6 +88,27 @@ jobs:
           echo "base: ${base:-none, every image file}"
           code/deploy/ci/gitops-check.sh gitops "$base"
 
+  # Security lint of the workflows (ADR-0041 (g)): zizmor with the regular persona on the whole repository, mounted
+  # read-only, as the code repositories run it (make zizmor there). Every finding fails (exit codes 11 to 14) and shows
+  # as an annotation; the deliberate ones are left out in .github/zizmor.yml, each with its reason. The job's read-only
+  # GITHUB_TOKEN turns on the online audits (impostor commits, actions with known vulnerabilities). No condition:
+  # gitops-ok is red when this job is red or skipped, on the pull requests of the bots too.
+  zizmor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --env=GH_TOKEN -v "$PWD:/src:ro" --workdir /src "$ZIZMOR_IMAGE" \
+            --persona=regular --no-progress --color=never --cache-dir /tmp/zizmor --format=github .
+
   # A preview, not a check: what the Applications of a pull request render to, next to what main renders, with Argo CD
   # itself (argocd-diff-preview), as a diff per Application in the job's summary. Outside gitops-ok, so it never blocks
   # a merge, and it comments nothing on the pull request (that would need a write token). It runs only for a pull
@@ -105,8 +131,8 @@ jobs:
     permissions:
       contents: read
     env:
-      # argocd-diff-preview from its official image pinned by digest, run with docker: this repository allows GitHub's
-      # own actions only.
+      # argocd-diff-preview from its official image pinned by digest, run with docker: every action of this workflow
+      # is GitHub's own.
       # renovate: datasource=docker depName=dagandersen/argocd-diff-preview
       ARGOCD_DIFF_PREVIEW_IMAGE: dagandersen/argocd-diff-preview:v0.2.17@sha256:ea90848df29337b50d5058330210b38e39232360b78d9c60951fc92e454c6941
     steps:
@@ -200,7 +226,7 @@ jobs:
           fi
 
   gitops-ok:
-    needs: [gitops]
+    needs: [gitops, zizmor]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}
@@ -210,4 +236,4 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
-          jq -e 'length == 1 and all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null
+          jq -e 'length == 2 and all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null

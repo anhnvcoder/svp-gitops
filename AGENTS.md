@@ -14,7 +14,7 @@ stg, prd chỉ đổi được qua pull request vào đây. Đọc trước: [`R
 - `platforms/<k3d|eks>/`: khác biệt của nền tảng; thứ phụ thuộc account hay buổi là mẫu `*.values.tpl`, không bao giờ là giá trị trong git.
 - `envs/<stg|prd>/`: overlay (chỉ phần khác gốc), `charts.yaml` (commit của repo code mà chart chạy), `images/<svc>.yaml` (bản phát hành).
 - `argocd/`: AppProject, `bootstrap.json`, chart app-of-apps (`apps/`, danh sách component ở `components.json`).
-- `.github/workflows/check.yml`, `CODEOWNERS`, `renovate.json`.
+- `.github/workflows/check.yml`, `pr-title.yml`, `scorecard.yml`, `CODEOWNERS`, `renovate.json`.
 
 ## Quy ước
 
@@ -28,7 +28,9 @@ Quy ước chung (ngôn ngữ, tài liệu timeless, ADR, comment, Git, repo pub
   Đổi bản phát hành qua promote, không chép tay.
 - **Code Owner:** mọi file có chủ `anhnvcoder` trừ `envs/stg/` (bot tự merge khi `gitops-ok` xanh); `envs/stg/svp-policy.yaml` vẫn
   có chủ, vì không bot nào được tắt kiểm provenance. PR đụng file có chủ cần người học duyệt.
-- **Git:** mọi thay đổi vào `main` đi qua PR có `gitops-ok` xanh; không tạo tag (ruleset `tags` cấm).
+- **Git:** mọi thay đổi vào `main` đi qua PR có `gitops-ok` xanh, chỉ squash merge; không tạo tag (ruleset `tags` cấm).
+- **Tiêu đề PR** thành tiêu đề commit, theo Conventional Commits (`<type>[(<scope>)][!]: <mô tả>`, type `feat fix chore docs refactor
+  test ci build perf revert`, hay `Revert "<tiêu đề>"`); `pr-title.yml` kiểm, regex và bộ thử ở mục "Tiêu đề PR" của `README.md`.
 
 ## Kiểm tra
 
@@ -38,6 +40,9 @@ Quy ước chung (ngôn ngữ, tài liệu timeless, ADR, comment, Git, repo pub
 - Chạy trên máy từ gốc bản clone đủ lịch sử của repo code: `deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]`;
   `make helm-check` của backend render mọi chart với overlay của bản clone này.
 - Job `diff-preview` chỉ ở PR, ngoài `gitops-ok`: diff manifest theo Application ở tóm tắt của lượt chạy.
+- Job `zizmor` (lint bảo mật workflow, image ghim `ZIZMOR_IMAGE`) nằm trong `gitops-ok`: sửa workflow thì chạy lệnh offline ở mục
+  "zizmor" của `README.md` trước khi mở PR; finding giữ có chủ đích vào `.github/zizmor.yml` kèm lý do. Trên máy không truyền token.
+- `scorecard.yml` (OpenSSF Scorecard) chạy trên `main` và hằng tuần, không phải check của PR; giữ đúng luật "Workflow Restrictions" ở đầu file.
 
 ## An toàn cloud
 
