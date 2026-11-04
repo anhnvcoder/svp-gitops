@@ -60,6 +60,7 @@ platforms/<platform>/       k3d và eks: khác biệt của nền tảng (mục 
   README.md                 nền tảng là gì
   <component>.yaml          values giống nhau trên mọi cluster của nền tảng
   <component>.values.tpl    mẫu sinh values từ giá trị cluster của root (thứ phụ thuộc account, buổi)
+  argo-cd.yaml              values của Argo CD trên nền tảng, bootstrap đọc sau base/argo-cd.yaml (không là Application)
 envs/<env>/                 stg và prd
   <component>.yaml          overlay: chỉ phần khác gốc, comment đầu file nói vì sao
   svp-policy.yaml           bật kiểm build provenance của Kyverno (requireProvenance: true)
@@ -107,7 +108,10 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   NetworkPolicy của nó, nhãn `elbv2.k8s.aws/pod-readiness-gate-inject: enabled` trên namespace `envoy-gateway-system` (root đặt trong
   `managedNamespaceMetadata` của `envoy-gateway`, chỉ `eks`: pod Envoy mới chỉ Ready khi NLB thấy target khoẻ, nên rollout Envoy không
   làm cổng vào từ chối kết nối), API server cổng 443, egress theo địa chỉ (`externalPeers` của `svp-service`: subnet RDS cổng 5432, dải S3 của region
-  cổng 443, agent Pod Identity `169.254.170.23` cổng 80).
+  cổng 443, agent Pod Identity `169.254.170.23` cổng 80), Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
+  `svp-root` (nhãn `svp.io/notify=root` do bootstrap gắn) ghi commit status `argocd/<env>` lên commit của repo này bằng GitHub App
+  `svp-argocd-notifier`, Secret qua External Secrets (`externalSecrets.argocdNotifications` của `svp-cluster.yaml`); Telegram khi sync lỗi
+  hay Degraded chỉ khi bootstrap gắn chat từ `.env`, chat không vào repo.
 - File `<name>.yaml` giữ thứ giống nhau trên mọi cluster của nền tảng; mẫu `<name>.values.tpl` giữ thứ cluster quyết định (VPC, tên, bucket,
   zone), render bằng Helm `tpl` trên `.Values.cluster`, mỗi giá trị qua `quote`/`toJson`. Phần mẫu sinh ra đọc sau overlay của env, nên
   overlay không đặt khoá mà mẫu đặt (mẫu thắng). Danh sách trong values bị thay cả danh sách khi ghép (`platformNamespaces` của
