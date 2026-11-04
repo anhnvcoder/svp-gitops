@@ -4,5 +4,5 @@
 # envs/stg/video-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/video-service
-  tag: "b10c69ba3935"
-  digest: "sha256:0e9ccd63f92cf5cb7a0c7361204f5f2ce95258961dacce396ba9e90374acb3fb"
+  tag: "5c2804ac48e2"
+  digest: "sha256:574df9d8e63d9ee394fd2273772b8aa1ff0d8b7bb092cd318fdd656cd3c7bba1"

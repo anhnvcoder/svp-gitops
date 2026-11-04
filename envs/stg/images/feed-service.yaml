@@ -4,5 +4,5 @@
 # envs/stg/feed-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/feed-service
-  tag: "b10c69ba3935"
-  digest: "sha256:3277a79f5b9f748641f8ad71767478a2c4dae042df9432dfa7d350afb55dd2af"
+  tag: "5c2804ac48e2"
+  digest: "sha256:8f3dd77a665dc8d177d8dc3cb04119a68005fa44dbc1d91419aa7902ad1e0a69"
