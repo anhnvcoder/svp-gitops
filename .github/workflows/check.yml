@@ -40,10 +40,53 @@ env:
   CHECKER_COMMIT: 6be8f25d87d5613c26de468809f6f7affebcf67f
 
 jobs:
+  # Which areas a pull request changes, so a job whose area it leaves alone skips and gitops-ok accepts that skip.
+  # Each output is true or false:
+  #   code       any file but documentation (Markdown, LICENSE): jobs gitops, diff-preview;
+  #   workflows  .github/: job zizmor.
+  # docs always runs. A change of the Makefile or of this workflow, a push and a dispatch turn every output true: when
+  # in doubt, run. The list comes from GitHub's API for the pull request, not from git, so no history is fetched.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.files.outputs.code }}
+      workflows: ${{ steps.files.outputs.workflows }}
+    steps:
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          else
+            files=Makefile
+          fi
+          printf '%s\n' "$files"
+          # any REGEX [EXCLUDE]: true when a file matches REGEX and not EXCLUDE.
+          any() {
+            if printf '%s\n' "$files" | grep -E -- "$1" | grep -v -E -e "${2:-^$}" | grep -q .; then echo true; else echo false; fi
+          }
+          {
+            if [ "$(any '^Makefile$|^\.github/workflows/check\.yml$')" = true ]; then
+              printf '%s=true\n' code workflows
+            else
+              echo "code=$(any '.' '^LICENSE$|\.md$')"
+              echo "workflows=$(any '^\.github/')"
+            fi
+          } | tee -a "$GITHUB_OUTPUT"
+
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
   # environment pins, checks the rules of the tree, the digests of every third-party image, and the signature,
   # attestations and provenance of every release image that changed.
   gitops:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -94,6 +137,8 @@ jobs:
   # GITHUB_TOKEN turns on the online audits (impostor commits, actions with known vulnerabilities). No condition:
   # gitops-ok is red when this job is red or skipped, on the pull requests of the bots too.
   zizmor:
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -138,7 +183,8 @@ jobs:
   # the side's commit, leaves the chart sources (upstream charts, the code repository at each revision) as they are,
   # and asks Argo CD for the manifests. Every repository is public and read anonymously, as on a cluster.
   diff-preview:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -244,7 +290,7 @@ jobs:
           fi
 
   gitops-ok:
-    needs: [gitops, zizmor, docs]
+    needs: [changes, gitops, zizmor, docs]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}
@@ -254,4 +300,10 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
-          jq -e 'length == 3 and all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null
+          # A skip is accepted only where job changes found the job's area untouched; any other skip is red.
+          jq -e '
+            .changes as $changes
+            | {"gitops": "code", "zizmor": "workflows"} as $area
+            | def skip_ok: $changes.result == "success" and $area[.key] != null and $changes.outputs[$area[.key]] == "false";
+            length == 4 and all(to_entries[]; .value.result == "success" or (.value.result == "skipped" and skip_ok))
+          ' <<< "$NEEDS" > /dev/null

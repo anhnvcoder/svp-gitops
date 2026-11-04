@@ -196,6 +196,10 @@ check tổng `gitops-ok`):
 4. Mọi image ghim digest (policy Kyverno CLI `images-pinned`); overlay không đổi version image của render nó chồng lên.
 5. File image đổi so với base: chữ ký, attestation `vuln`, provenance env đòi; có provenance thì tag là 12 hex của commit nó nêu.
 
+Job `changes` chia PR theo vùng qua danh sách file của API (quyền `pull-requests: read`, không checkout): PR chỉ đổi tài liệu (`.md`,
+`LICENSE`) bỏ qua `gitops` và `diff-preview`, PR không đổi `.github/` bỏ qua `zizmor`; `docs` luôn chạy; đổi `Makefile` hay `check.yml`,
+push và dispatch thì chạy hết. `gitops-ok` nhận đúng các skip đó, skip khác là đỏ. PR của bot luôn đổi `envs/` nên luôn chạy `gitops`.
+
 Không so bản ghi stg, không luật tổ tiên (tag image không cần là tổ tiên của `revision`), không clone `svp-frontend`. Chạy trên máy, từ gốc
 một bản clone đủ lịch sử của repo code (`origin/main` đã fetch):
 
@@ -228,7 +232,7 @@ chạy trong image ghim tag + digest (`MARKDOWNLINT_IMAGE`, `LYCHEE_IMAGE` trong
 
 ### zizmor
 
-Job `zizmor` của cùng workflow, **trong `gitops-ok`**, chạy cả ở PR của bot: lint bảo mật workflow bằng
+Job `zizmor` của cùng workflow, **trong `gitops-ok`**, chạy khi PR đổi `.github/` (job `changes`), khi push và dispatch: lint bảo mật workflow bằng
 [zizmor](https://docs.zizmor.sh/) từ image chính thức ghim tag + digest (`ZIZMOR_IMAGE` trong `env` của `check.yml`, Renovate theo dõi),
 `--persona=regular` trên cả repo như repo code chạy (`make zizmor` ở đó), mọi finding là đỏ và hiện thành annotation trên PR. Token
 `GITHUB_TOKEN` chỉ đọc của job bật các audit online (commit mạo danh, action có lỗ hổng). Finding giữ có chủ đích ghi ở
