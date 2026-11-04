@@ -1,6 +1,25 @@
 # svp-gitops
 
-Cấu hình triển khai của nền tảng video ngắn, repo code [svp-backend](https://github.com/anhnvcoder/svp-backend): values
+Cấu hình triển khai của nền tảng video ngắn: values Helm, bản phát hành của từng môi trường và manifest Argo CD, do Argo CD của mỗi cluster đọc.
+
+## Mục lục
+
+- [Bối cảnh](#bối-cảnh)
+- [Cài đặt](#cài-đặt)
+- [Sử dụng](#sử-dụng)
+- [Cấu trúc](#cấu-trúc)
+- [Lớp nền tảng](#lớp-nền-tảng)
+- [Ai duyệt gì](#ai-duyệt-gì)
+- [Promote](#promote)
+- [Check](#check)
+- [Tiêu đề PR](#tiêu-đề-pr)
+- [Nguồn gốc](#nguồn-gốc)
+- [Đóng góp](#đóng-góp)
+- [Giấy phép](#giấy-phép)
+
+## Bối cảnh
+
+Repo code của nền tảng là [svp-backend](https://github.com/anhnvcoder/svp-backend); repo này giữ values
 Helm gốc, khác biệt và bản phát hành của từng môi trường, manifest của Argo CD. Argo CD của mỗi cluster chỉ đọc repo này (và chart
 của repo code ở đúng commit repo này ghim); cái gì chạy ở stg, prd chỉ đổi được qua pull request vào đây. Code, test, Dockerfile, chart
 (`deploy/helm/*`) và CI build, quét, ký image ở repo code; riêng web client build, quét, ký ở repo của nó,
@@ -8,6 +27,27 @@ của repo code ở đúng commit repo này ghim); cái gì chạy ở stg, prd 
 
 Repo public: **không có secret, token, khoá hay id App nào ở đây**. Values chỉ nêu tên Secret; giá trị nằm ở cluster (lab: `.env` của
 máy chạy, qua External Secrets Operator) hay ở AWS Secrets Manager (prd).
+
+## Cài đặt
+
+Repo là cấu hình, không có gì để cài hay build. Clone về:
+
+```sh
+git clone https://github.com/anhnvcoder/svp-gitops.git
+```
+
+Chạy check trên máy cần thêm Docker (`make docs-check`, zizmor) và bản clone đủ lịch sử của repo code
+[svp-backend](https://github.com/anhnvcoder/svp-backend) cùng công cụ của nó (`gitops-check.sh`, mục [Check](#check)).
+
+## Sử dụng
+
+Mọi thay đổi vào cluster đi qua pull request vào repo này, qua check tổng `gitops-ok` (mục [Check](#check)). Kiểm tài liệu trên máy:
+
+```sh
+make docs-check
+```
+
+`make help` liệt kê các target.
 
 ## Cấu trúc
 
@@ -33,6 +73,8 @@ argocd/
 .github/workflows/pr-title.yml  tiêu đề PR theo Conventional Commits (mục Tiêu đề PR)
 .github/workflows/scorecard.yml OpenSSF Scorecard của repo (mục Check)
 CODEOWNERS, renovate.json
+Makefile                    docs-check (markdownlint-cli2 và lychee); cấu hình ở .markdownlint.yaml, lychee.toml
+LICENSE                     Apache-2.0
 ```
 
 Thứ tự ghép values của một Application: `values.yaml` của chart → `base/` → `platforms/<platform>/<name>.yaml` → `envs/<env>/<name>.yaml`
@@ -47,7 +89,7 @@ không component nào được mang.
 ## Lớp nền tảng
 
 Một env chạy trên nhiều nền tảng: stg chạy ở cluster lab `k3d` (cluster GitOps của repo code, runner của `verify.yml`)
-và ở Amazon EKS (`eks`, giai đoạn 7); prd chỉ chạy trên `eks`. Khác biệt giữa hai nền tảng nằm ở `platforms/`, không ở `envs/`, nên
+và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa hai nền tảng nằm ở `platforms/`, không ở `envs/`, nên
 `envs/stg/` (bản phát hành, `charts.yaml`, overlay) dùng chung cho cả hai và promote prd không đổi.
 
 - Root nhận giá trị `platform` (`k3d` | `eks`, bắt buộc, không mặc định, như `env`); bootstrap đặt (`deploy/k8s/gitops.sh` của repo code).
@@ -58,7 +100,7 @@ và ở Amazon EKS (`eks`, giai đoạn 7); prd chỉ chạy trên `eks`. Khác 
   `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `aws-load-balancer-controller` (NLB trước Envoy từ Service
   của Envoy, wave 1 vì Gateway `svp` chỉ `Programmed` khi Service có địa chỉ), `external-dns` (bản ghi Route 53 cho host của HTTPRoute gắn
   vào Gateway `svp`, wave 2). Đường dev (`make k8s-up`) chạy component của `k3d`.
-- `platforms/k3d/` chỉ có README: cluster k3d chạy đúng `base/`, root với `platform=k3d` render đúng các Application như trước khi có lớp này.
+- `platforms/k3d/` chỉ có README: cluster k3d chạy đúng `base/`, nên root với `platform=k3d` render đúng các Application của `base/`.
 - `platforms/eks/`: Postgres `external` (RDS qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod
   Identity), StorageClass `gp3` mặc định của `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope
   (Redpanda không ghim class, nhận class mặc định), issuer ACME Let's Encrypt production (DNS-01 Route 53), Service NLB của Envoy và
@@ -173,6 +215,13 @@ chart (chart upstream, chart repo code ở `revision`), rồi lấy manifest Arg
 đổi; đổi `base/` hiện ở mọi env và nền tảng đọc file đó, đổi overlay hay file image chỉ ở env đó. Không có diff khi bước công cụ lỗi: đọc log
 của bước `argocd-diff-preview` (Application không render được nêu tên ở đó). Diff dài hơn 65 536 ký tự bị cắt.
 
+### Docs
+
+Job `docs` của cùng workflow, **trong `gitops-ok`**, quyền `contents: read`, chạy `make docs-check`: markdownlint-cli2 theo
+`.markdownlint.yaml`, rồi lychee `--offline --include-fragments` (link tương đối và anchor heading; link ra ngoài không kiểm). Hai công cụ
+chạy trong image ghim tag + digest (`MARKDOWNLINT_IMAGE`, `LYCHEE_IMAGE` trong `Makefile`, Renovate theo dõi), không mạng. Mặc định kiểm mọi
+`.md` git theo dõi và file mới chưa theo dõi; `make docs-check DOCS='<file hay glob>'` thu hẹp.
+
 ### zizmor
 
 Job `zizmor` của cùng workflow, **trong `gitops-ok`**, chạy cả ở PR của bot: lint bảo mật workflow bằng
@@ -226,3 +275,12 @@ còn ở repo code):
 Thiết kế và lý do: [ADR-0025](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0025-gitops-config-repo.md),
 [ADR-0024](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0024-multi-environment.md) §8,
 [ADR-0040](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0040-sigstore-bundle-actions-attest.md) (chữ ký, attestation, provenance).
+
+## Đóng góp
+
+Quy ước chung (ngôn ngữ, tài liệu, Git, repo public) ở [`CONTRIBUTING.md`](https://github.com/anhnvcoder/.github/blob/main/CONTRIBUTING.md)
+của `anhnvcoder/.github`; luật riêng của repo ở [`AGENTS.md`](AGENTS.md). Mọi thay đổi vào `main` đi qua pull request có `gitops-ok` xanh.
+
+## Giấy phép
+
+[Apache-2.0](LICENSE).

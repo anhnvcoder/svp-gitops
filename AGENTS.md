@@ -15,6 +15,7 @@ stg, prd chỉ đổi được qua pull request vào đây. Đọc trước: [`R
 - `envs/<stg|prd>/`: overlay (chỉ phần khác gốc), `charts.yaml` (commit của repo code mà chart chạy), `images/<svc>.yaml` (bản phát hành).
 - `argocd/`: AppProject, `bootstrap.json`, chart app-of-apps (`apps/`, danh sách component ở `components.json`).
 - `.github/workflows/check.yml`, `pr-title.yml`, `scorecard.yml`, `CODEOWNERS`, `renovate.json`.
+- `Makefile` (`make docs-check`), `.markdownlint.yaml`, `lychee.toml`, `LICENSE` (Apache-2.0).
 
 ## Quy ước
 
@@ -39,6 +40,8 @@ Quy ước chung (ngôn ngữ, tài liệu timeless, ADR, comment, Git, repo pub
   node, render chart của repo code ở `revision` của env, mọi image ghim digest, chữ ký, attestation và provenance của image đổi.
 - Chạy trên máy từ gốc bản clone đủ lịch sử của repo code: `deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]`;
   `make helm-check` của backend render mọi chart với overlay của bản clone này.
+- `make docs-check`: markdownlint-cli2 và lychee `--offline` trên mọi `.md` (image ghim digest, không mạng); `DOCS='<file hay glob>'`
+  thu hẹp. Job `docs` của `check.yml` chạy đúng lệnh này và nằm trong `gitops-ok`; sửa `.md` thì chạy trước khi mở PR.
 - Job `diff-preview` chỉ ở PR, ngoài `gitops-ok`: diff manifest theo Application ở tóm tắt của lượt chạy.
 - Job `zizmor` (lint bảo mật workflow, image ghim `ZIZMOR_IMAGE`) nằm trong `gitops-ok`: sửa workflow thì chạy lệnh offline ở mục
   "zizmor" của `README.md` trước khi mở PR; finding giữ có chủ đích vào `.github/zizmor.yml` kèm lý do. Trên máy không truyền token.
