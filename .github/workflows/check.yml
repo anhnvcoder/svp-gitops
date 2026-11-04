@@ -109,6 +109,19 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" --env=GH_TOKEN -v "$PWD:/src:ro" --workdir /src "$ZIZMOR_IMAGE" \
             --persona=regular --no-progress --color=never --cache-dir /tmp/zizmor --format=github .
 
+  # Static check of the Markdown (make docs-check): markdownlint-cli2 and lychee --offline, from the images the Makefile
+  # pins by digest, run with docker on the runner and without network.
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make docs-check
+
   # A preview, not a check: what the Applications of a pull request render to, next to what main renders, with Argo CD
   # itself (argocd-diff-preview), as a diff per Application in the job's summary. Outside gitops-ok, so it never blocks
   # a merge, and it comments nothing on the pull request (that would need a write token). It runs only for a pull
@@ -216,17 +229,22 @@ jobs:
             -e TIMEOUT=900 \
             -e TITLE="Argo CD diff preview (<env>-<platform>-<component>, amd64 nodes)" \
             "$ARGOCD_DIFF_PREVIEW_IMAGE"
+      # The tool's own title heads its diff; without a diff the summary says which step to read.
       - name: Summary
         if: always()
         run: |
           if [ -s preview/output/diff.md ]; then
             cat preview/output/diff.md >>"$GITHUB_STEP_SUMMARY"
           else
-            echo "No diff: argocd-diff-preview did not finish (see its step's log)." >>"$GITHUB_STEP_SUMMARY"
+            {
+              echo '### Argo CD diff preview'
+              echo
+              echo 'No diff: the argocd-diff-preview step did not finish. Read the log of that step.'
+            } >>"$GITHUB_STEP_SUMMARY"
           fi
 
   gitops-ok:
-    needs: [gitops, zizmor]
+    needs: [gitops, zizmor, docs]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}
@@ -236,4 +254,4 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
-          jq -e 'length == 2 and all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null
+          jq -e 'length == 3 and all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null

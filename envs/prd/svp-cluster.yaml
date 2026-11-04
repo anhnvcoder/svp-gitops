@@ -7,7 +7,7 @@ apexHost: svp.example
 # The Secrets come from AWS Secrets Manager through External Secrets Operator: entry svp/prd/<entry>, a JSON object of
 # the same keys as on a lab cluster. Each namespace's store assumes a role of its own, allowed GetSecretValue on the
 # entries that namespace reads (templates/external-secrets.yaml of chart svp-cluster lists them). The region, the
-# account id and the Postgres host are placeholders until the production cluster exists (stage 7 chooses them):
+# account id and the Postgres host are placeholders until the production cluster exists (its setup chooses them):
 # 000000000000 is no account, and .example never resolves.
 externalSecrets:
   enabled: true

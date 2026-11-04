@@ -2,7 +2,7 @@
 # in namespace svp-obs, wave 2 of argocd/apps/components.json: the Prometheus operator and its CRDs,
 # Prometheus v3.15.0, Alertmanager v0.34.1, Grafana
 # 13.2.4 and kube-state-metrics. Prometheus takes the place of the one inside grafana/otel-lgtm in compose, set up the
-# same way (deploy/observability/prometheus/prometheus.yaml), so the dashboards, rules and promtool tests of stage 3
+# same way (deploy/observability/prometheus/prometheus.yaml), so the dashboards, rules and promtool tests of compose
 # run unchanged. The project's rules, dashboards and Grafana datasources other than Prometheus and Alertmanager come
 # from chart svp-observability (wave 5), the NetworkPolicies of svp-obs too.
 
