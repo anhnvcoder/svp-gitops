@@ -4,5 +4,5 @@
 # envs/stg/media-worker.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/media-worker
-  tag: "627c108dc932"
-  digest: "sha256:b5e2da209881581a23b544731e00faacb148dc072f20a8fcbbe6877cf8ca8828"
+  tag: "b10c69ba3935"
+  digest: "sha256:9e459b0635debb666aebe7fac9765b27aac30b80f4fb01baf4730bef4c445e29"
