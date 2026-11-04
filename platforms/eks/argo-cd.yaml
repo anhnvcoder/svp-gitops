@@ -1,0 +1,84 @@
+# Platform eks: Argo CD Notifications on (ADR-0032 A, B of the code repository), read after base/argo-cd.yaml. Only a
+# cluster that lives for the whole session reports: the runner's k3d clusters keep the base's notifications off, so
+# they write no status on commits.
+#
+# What reports is the root Application svp-root alone: it is Healthy only once every wave of its children has synced and
+# is Healthy, so one commit status argocd/<env> per commit of svp-gitops says whether the whole environment came up,
+# instead of one status per Application. The bootstrap (deploy/k8s/gitops.sh of the code repository) labels the root
+# svp.io/notify=root, which the subscription below selects.
+#
+# Credentials come from Secret argocd-notifications-secret, built by External Secrets from chart svp-cluster
+# (externalSecrets.argocdNotifications, on in svp-cluster.yaml beside this file), so the chart makes none:
+# - GitHub App svp-argocd-notifier: Commit statuses read and write on svp-gitops only, nothing else;
+# - the Telegram bot of Alertmanager. The chat it writes to is no value of this public repository: the bootstrap adds
+#   that recipient to the subscriptions when SVP_ALERT_TELEGRAM_CHAT_ID is set in .env, and without it only the
+#   commit status is sent.
+# No argocdUrl: the server is a ClusterIP Service reached through a port-forward (threat model OPS-2), so a status
+# carries no link.
+notifications:
+  enabled: true
+  secret:
+    create: false
+  notifiers:
+    service.github: |
+      appID: $github-appID
+      installationID: $github-installationID
+      privateKey: $github-privateKey
+    service.telegram: |
+      token: $telegram-token
+  # Each template holds the commit status (github) and the message (telegram); a service reads only its own part.
+  # The root has one source, svp-gitops at the branch it follows, so the default repoURL of a status is right; its
+  # revision is the commit being synced (operation) while running, then the one the sync applied.
+  templates:
+    template.svp-sync-running: |
+      github:
+        revisionPath: "{{.app.status.operationState.operation.sync.revision}}"
+        status:
+          state: pending
+          label: "argocd/{{.app.spec.source.helm.valuesObject.env}}"
+    template.svp-deployed: |
+      message: "{{.app.spec.source.helm.valuesObject.env}}: Argo CD deployed {{.app.status.operationState.syncResult.revision | trunc 12}} of svp-gitops, every Application Healthy."
+      github:
+        status:
+          state: success
+          label: "argocd/{{.app.spec.source.helm.valuesObject.env}}"
+    template.svp-sync-failed: |
+      message: "{{.app.spec.source.helm.valuesObject.env}}: Argo CD sync {{.app.status.operationState.phase}} at {{.app.status.operationState.syncResult.revision | trunc 12}} of svp-gitops: {{.app.status.operationState.message}}"
+      github:
+        status:
+          state: failure
+          label: "argocd/{{.app.spec.source.helm.valuesObject.env}}"
+    template.svp-degraded: |
+      message: "{{.app.spec.source.helm.valuesObject.env}}: Argo CD reports the root Degraded at {{.app.status.sync.revision | trunc 12}} of svp-gitops: an Application below it is not Healthy (runbook argocd-application-degraded)."
+      github:
+        revisionPath: "{{.app.status.sync.revision}}"
+        status:
+          state: failure
+          label: "argocd/{{.app.spec.source.helm.valuesObject.env}}"
+  # Once per revision, so a resync of the same commit does not write the status or send the message again.
+  triggers:
+    trigger.on-sync-running: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Running']
+        oncePer: app.status.operationState.operation.sync.revision
+        send: [svp-sync-running]
+    trigger.on-deployed: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+        oncePer: app.status.operationState.syncResult.revision
+        send: [svp-deployed]
+    trigger.on-sync-failed: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Error', 'Failed']
+        oncePer: app.status.operationState.syncResult.revision
+        send: [svp-sync-failed]
+    trigger.on-health-degraded: |
+      - when: app.status.health.status == 'Degraded'
+        oncePer: app.status.sync.revision
+        send: [svp-degraded]
+  subscriptions:
+    - recipients:
+        - github
+      triggers:
+        - on-sync-running
+        - on-deployed
+        - on-sync-failed
+        - on-health-degraded
+      selector: svp.io/notify=root

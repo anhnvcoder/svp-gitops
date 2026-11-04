@@ -53,3 +53,8 @@ envoy:
   # from the VPC (healthCheckCIDR, from the template).
   networkPolicy:
     enabled: true
+
+# Argo CD Notifications run on this platform (argo-cd.yaml beside this file): their Secret
+# argocd/argocd-notifications-secret comes through External Secrets like every other, from entry argocd-notifications.
+externalSecrets:
+  argocdNotifications: true
