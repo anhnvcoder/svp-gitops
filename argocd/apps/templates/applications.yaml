@@ -162,6 +162,8 @@ clusters) and eks (Amazon EKS), holding
   output and git never holds. What it renders becomes helm.valuesObject of the Application, which Argo CD reads after
   every values file: a template sets only what its cluster decides, which no file of an environment sets. Each value
   goes in with quote or toJson, never as raw text, so a name or an address cannot change the YAML around it.
+- argo-cd.yaml: the platform's values of Argo CD itself, which the bootstrap (deploy/k8s/gitops.sh of the code
+  repository) installs after the values file of argocd/bootstrap.json; no Application, so nothing here reads it.
 A platform file that names no component of that platform, is no YAML map or sets cluster, a template that renders no
 YAML map, an image or canary key in a service's, a cluster without a key of the contract below, all fail the render.
 */}}
@@ -188,7 +190,7 @@ YAML map, an image or canary key in a service's, a cluster without a key of the 
 {{- range $file, $content := .Files.Glob (printf "files/platforms/%s/*" $platform) }}
 {{- $base := base $file }}
 {{- $seen = true }}
-{{- if and (not (hasPrefix "." $base)) (ne $base "README.md") }}
+{{- if and (not (hasPrefix "." $base)) (ne $base "README.md") (ne $base "argo-cd.yaml") }}
 {{- $name := trimSuffix ".yaml" (trimSuffix ".values.tpl" $base) }}
 {{- if or (eq $name $base) (not (hasKey $names $name)) }}
 {{- fail (printf "platforms/%s/%s: a file of a platform is README.md, <name>.yaml or <name>.values.tpl, name a component of components.json" $platform $base) }}

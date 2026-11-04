@@ -20,4 +20,5 @@ externalSecrets:
       svp-data: arn:aws:iam::000000000000:role/svp-prd-external-secrets-svp-data
       svp-obs: arn:aws:iam::000000000000:role/svp-prd-external-secrets-svp-obs
       keda: arn:aws:iam::000000000000:role/svp-prd-external-secrets-keda
+      argocd: arn:aws:iam::000000000000:role/svp-prd-external-secrets-argocd
   postgres: svp-pg.prd.example:5432
