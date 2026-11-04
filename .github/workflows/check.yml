@@ -37,7 +37,7 @@ env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
-  CHECKER_COMMIT: 1c16634d8a0ba05d9399e0be9358a5ecce643005
+  CHECKER_COMMIT: 6be8f25d87d5613c26de468809f6f7affebcf67f
 
 jobs:
   # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
