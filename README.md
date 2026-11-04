@@ -198,7 +198,7 @@ check tổng `gitops-ok`):
 
 Job `changes` chia PR theo vùng qua danh sách file của API (quyền `pull-requests: read`, không checkout): PR chỉ đổi tài liệu (`.md`,
 `LICENSE`) bỏ qua `gitops` và `diff-preview`, PR không đổi `.github/` bỏ qua `zizmor`; `docs` luôn chạy; đổi `Makefile` hay `check.yml`,
-push và dispatch thì chạy hết. `gitops-ok` nhận đúng các skip đó, skip khác là đỏ. PR của bot luôn đổi `envs/` nên luôn chạy `gitops`.
+push và dispatch thì chạy hết (file đổi tên xét cả tên cũ; API liệt kê thiếu file thì cũng chạy hết). `gitops-ok` nhận đúng các skip đó, skip khác là đỏ. PR của bot luôn đổi `envs/` nên luôn chạy `gitops`.
 
 Không so bản ghi stg, không luật tổ tiên (tag image không cần là tổ tiên của `revision`), không clone `svp-frontend`. Chạy trên máy, từ gốc
 một bản clone đủ lịch sử của repo code (`origin/main` đã fetch):
