@@ -182,16 +182,23 @@ jobs:
   # a merge, and it comments nothing on the pull request (that would need a write token). It runs only for a pull
   # request: a push to main has nothing to compare with.
   #
-  # The root here is a Helm chart (argocd/apps), not Application manifests in files, so the job renders the root of
-  # each environment on each platform the key platforms of components.json lists, for both sides (the merge commit and
-  # its first parent, the base it was merged onto), on amd64 nodes (architecture changes only the traffic router plugin
-  # of Argo Rollouts), with the same values the bootstrap sets: env, platform, nodeArch, and on eks cluster from the
-  # fixture of the checker commit. Each Application gets its environment and platform in front of its name
-  # (stg-k3d-gateway): the three roots make Applications of one name, which the tool would otherwise number in the
-  # order of the files. The tool then creates a kind cluster through the runner's docker, installs Argo CD from the
-  # chart and version argocd/bootstrap.json pins, points every source of this repository (the values, ref values) at
-  # the side's commit, leaves the chart sources (upstream charts, the code repository at each revision) as they are,
-  # and asks Argo CD for the manifests. Every repository is public and read anonymously, as on a cluster.
+  # The root here is two Helm charts, not Application manifests in files: level 1, argocd/root, makes one Application,
+  # svp-apps, whose valuesObject level 2, argocd/apps, renders into one Application per component. So the job renders
+  # both levels of each environment on each platform the key platforms of components.json lists, as gitops-check.sh
+  # does, for both sides (the merge commit and its first parent, the base it was merged onto), on amd64 nodes
+  # (architecture changes only the traffic router plugin of Argo Rollouts): argocd/root with the same values the
+  # bootstrap sets (env, platform, nodeArch, and on eks cluster from the fixture of the checker commit), then
+  # argocd/apps of the same side with the valuesObject of svp-apps. A side without argocd/root (main before the root
+  # had two levels) renders argocd/apps with those values directly. Only the Applications of level 2 go to the tool;
+  # svp-apps would only show them again. An environment that pins a commit of svp-gitops (gitopsRevision) runs
+  # argocd/apps, base/ and platforms/ at that commit; here it renders them at the side's commit, as it would run
+  # pinned there (gitops-ok renders it at its pin). Each Application gets its environment and platform in front of
+  # its name (stg-k3d-gateway): the three roots make Applications of one name, which the tool would otherwise number
+  # in the order of the files. The tool then creates a kind cluster through the runner's docker, installs Argo CD from
+  # the chart and version argocd/bootstrap.json pins, points every source of this repository (the values, ref values
+  # and ref env) at the side's commit, leaves the chart sources (upstream charts, the code repository at each
+  # revision) as they are, and asks Argo CD for the manifests. Every repository is public and read anonymously, as on
+  # a cluster.
   diff-preview:
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
@@ -248,6 +255,20 @@ jobs:
               env=${target%%:*} plat=${target#*:}
               args=(--namespace argocd --set-string "env=$env" --set nodeArch=amd64 --set-string "platform=$plat")
               [ "$plat" != eks ] || args+=(-f cluster.yaml)
+              if [ -f "$tree/argocd/root/Chart.yaml" ]; then
+                helm template svp-root "$tree/argocd/root" "${args[@]}" >level1.yaml 2>err || {
+                  grep -v 'found symbolic link in path' err >&2
+                  echo "::error::helm template of argocd/root ($tree) for $env on $plat"
+                  exit 1
+                }
+                docker run --rm -i --network none "$yq_image" -o=json \
+                  'select(.kind == "Application" and .metadata.name == "svp-apps") | .spec.source.helm.valuesObject' \
+                  <level1.yaml | jq -se 'select(length == 1 and (.[0] | type) == "object") | .[0]' >level2.json || {
+                  echo "::error::argocd/root ($tree) for $env on $plat: no single Application svp-apps with a valuesObject"
+                  exit 1
+                }
+                args=(--namespace argocd -f level2.json)
+              fi
               helm template svp-root "$tree/argocd/apps" "${args[@]}" >root.yaml 2>err || {
                 grep -v 'found symbolic link in path' err >&2
                 echo "::error::helm template of argocd/apps ($tree) for $env on $plat"

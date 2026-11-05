@@ -1,9 +1,9 @@
-# Production, rendered and checked only until a production cluster exists. Errors carry environment prd. The object
-# store's public endpoint is a placeholder under the reserved .example TLD, which never resolves; the real name comes
-# with the cloud cluster. A service on the request path keeps serving through a node loss or a drain: two replicas on
-# two nodes, at most one taken down at a time. A floor of policy, not a measured size: resources wait for a load test.
+# Production. Errors carry environment prd. The object store's endpoints are the cluster's (platforms/eks/, from
+# value cluster). A service on the request path keeps serving through a node loss or a drain: two replicas on two
+# nodes, at most one taken down at a time. A floor of policy, not a measured size, since no load test has run on stg
+# yet: resources stay the base's, and the requests of every pod of prd with these floors fit the three nodes (the code
+# repository's decision record on Kafka in prd, appendix, section Capacity).
 env:
-  S3_PUBLIC_ENDPOINT: https://s3.svp.example
   SENTRY_ENVIRONMENT: prd
 replicas: 2
 pdb:

@@ -1,0 +1,8 @@
+apiVersion: v2
+name: svp-root
+description: >-
+  First level of the GitOps root of the short-video platform: reads envs/<env>/ on the revision it follows itself and
+  makes the one Application svp-apps, chart argocd/apps at the commit of svp-gitops the environment pins (or at that
+  same revision when it pins none), which makes one Application per component.
+type: application
+version: 0.1.0

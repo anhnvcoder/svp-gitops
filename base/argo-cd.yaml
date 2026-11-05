@@ -1,6 +1,7 @@
 # Argo CD v3.5.5 (chart https://argoproj.github.io/argo-helm argo-cd 10.10.5), release argocd in namespace argocd: the
-# GitOps path. Installed by the bootstrap (deploy/k8s/gitops.sh of the code repository) at the version of
-# argocd/bootstrap.json, before everything else; it is not in components.json, it builds the rest of the cluster from
+# GitOps path. Installed by the bootstrap at the version of argocd/bootstrap.json, before everything else
+# (deploy/k8s/gitops.sh of the code repository on k3d; on EKS a helm_release of root aws/gitops/<env> of the
+# infrastructure repository, the GitOps Bridge); it is not in components.json, it builds the rest of the cluster from
 # GitHub.
 #
 # Minimal: the application controller, repo-server, server and Redis only. Logins are the local admin user (password
@@ -14,7 +15,8 @@ notifications:
   enabled: false
 applicationSet:
   # The chart has no switch to leave the ApplicationSet controller out; zero replicas leave its Deployment without a
-  # pod. One components.json already lists every Application.
+  # pod. One components.json already lists every Application. Platform eks runs it (argo-cd.yaml there) for the one
+  # ApplicationSet of the GitOps Bridge, which makes the root.
   replicas: 0
 
 configs:
@@ -30,9 +32,9 @@ configs:
     # resource and comparison, cached until a refresh, a new revision, a changed Application spec or a changed
     # resourceVersion of the live object. Read as ARGOCD_APPLICATION_CONTROLLER_SERVER_SIDE_DIFF by the controller's
     # StatefulSet.
-    # The root svp-root turns it off with annotation argocd.argoproj.io/compare-options: ServerSideDiff=false
-    # (deploy/k8s/lib.sh, argocd_root_app): it applies its child Applications client-side, and a server-side dry run
-    # would not see a field deleted from them. The children apply their own objects server-side.
+    # The two levels of the root, svp-root and svp-apps (argocd/root), turn it off with annotation
+    # argocd.argoproj.io/compare-options: ServerSideDiff=false: they apply their child Applications client-side, and a
+    # server-side dry run would not see a field deleted from them. The children apply their own objects server-side.
     controller.diff.server.side: "true"
   cm:
     # Argo CD polls GitHub: a cluster on this machine cannot take GitHub's webhooks. Every 60 s with no jitter: the

@@ -8,6 +8,7 @@ Cấu hình triển khai của nền tảng video ngắn: values Helm, bản ph�
 - [Cài đặt](#cài-đặt)
 - [Sử dụng](#sử-dụng)
 - [Cấu trúc](#cấu-trúc)
+- [Root hai tầng và bootstrap](#root-hai-tầng-và-bootstrap)
 - [Lớp nền tảng](#lớp-nền-tảng)
 - [Ai duyệt gì](#ai-duyệt-gì)
 - [Promote](#promote)
@@ -26,7 +27,7 @@ của repo code ở đúng commit repo này ghim); cái gì chạy ở stg, prd 
 [svp-frontend](https://github.com/anhnvcoder/svp-frontend). Mỗi `envs/<env>/images/web.yaml` ghi bản nào đang chạy.
 
 Repo public: **không có secret, token, khoá hay id App nào ở đây**. Values chỉ nêu tên Secret; giá trị nằm ở cluster (lab: `.env` của
-máy chạy, qua External Secrets Operator) hay ở AWS Secrets Manager (prd).
+máy chạy, qua External Secrets Operator) hay ở AWS Secrets Manager (mọi env trên EKS).
 
 ## Cài đặt
 
@@ -64,12 +65,14 @@ platforms/<platform>/       k3d và eks: khác biệt của nền tảng (mục 
 envs/<env>/                 stg và prd
   <component>.yaml          overlay: chỉ phần khác gốc, comment đầu file nói vì sao
   svp-policy.yaml           bật kiểm build provenance của Kyverno (requireProvenance: true)
-  charts.yaml               commit của repo code mà chart của env chạy, cùng hai giá trị dẫn xuất từ commit đó
+  charts.yaml               commit của repo code mà chart của env chạy, cùng hai giá trị dẫn xuất từ commit đó;
+                            prd thêm gitopsRevision, commit của repo này mà prd chạy (mục Root hai tầng và bootstrap)
   images/<svc>.yaml         7 file, mỗi file chỉ khối image (repository, tag, digest) của bản phát hành
 argocd/
   project.yaml              AppProject svp và default (đã khoá)
   bootstrap.json            chart Argo CD: repo, chart, version, values (base/argo-cd.yaml)
-  apps/                     chart app-of-apps; components.json là danh sách component
+  root/                     tầng 1 của root: đọc envs/<env>/, ra đúng một Application svp-apps
+  apps/                     tầng 2, chart app-of-apps; components.json là danh sách component
 .github/workflows/check.yml check của mỗi pull request và push main, check tổng gitops-ok
 .github/workflows/pr-title.yml  tiêu đề PR theo Conventional Commits (mục Tiêu đề PR)
 .github/workflows/scorecard.yml OpenSSF Scorecard của repo (mục Check)
@@ -79,13 +82,40 @@ LICENSE                     Apache-2.0
 ```
 
 Thứ tự ghép values của một Application: `values.yaml` của chart → `base/` → `platforms/<platform>/<name>.yaml` → `envs/<env>/<name>.yaml`
-→ `envs/<env>/images/<name>.yaml` → phần mẫu `platforms/<platform>/<name>.values.tpl` sinh ra (`helm.valuesObject`, Argo CD đọc sau mọi
-file). Chart `argocd/apps` từ chối lúc render (Argo CD báo `ComparisonError` trên root): env không có thư mục, thiếu `charts.yaml` hay có
-khoá khác ba khoá của nó, overlay không trùng tên component, overlay của release `svp-service` có `image`, `canary`, `httpRoute.name`,
-thiếu một trong 7 file `images/`, file `images/` có khoá ngoài `image`; `platform` không đặt hay khác `k3d`, `eks`, trường `platforms` của
+→ `envs/<env>/images/<name>.yaml` → phần mẫu `platforms/<platform>/<name>.values.tpl` sinh ra. `base/`, `platforms/` là file values, đọc qua
+nguồn `ref: values` ở revision của chart `argocd/apps`; overlay, file image (nội dung tầng 1 đọc ở revision root theo dõi) và phần mẫu sinh ra
+gộp theo đúng thứ tự đó vào `helm.valuesObject`, Argo CD đọc sau mọi file values. Root từ chối lúc render (Argo CD báo `ComparisonError` trên root): tầng 1 khi env không có thư mục, thiếu `charts.yaml` hay có khoá
+khác ba khoá của nó (cộng `gitopsRevision` 40 hex), file không phải map YAML, overlay của release `svp-service` có `image`, `canary`,
+`httpRoute.name`, file `images/` có khoá ngoài `image`; tầng 2 khi overlay không trùng tên component, thiếu một trong 7 file `images/`, giá trị
+của `charts.yaml` sai dạng, `platform` không đặt hay khác `k3d`, `eks`, trường `platforms` của
 `components.json` sai, file của nền tảng không trùng component chạy trên nền tảng đó, không phải map YAML hay đặt `cluster`, file hay mẫu của
 release `svp-service` có `image`, `canary`, `httpRoute.name`, `cluster` thiếu khoá hay sai dạng (mục dưới). `charts` là tên dành riêng,
 không component nào được mang.
+
+## Root hai tầng và bootstrap
+
+Root `svp-root` là chart `argocd/root` (tầng 1) ở revision nó theo dõi (`refs/heads/main` trên EKS). Nó đọc `envs/<env>/`, kiểm phần chỉ nội
+dung file cho thấy, rồi ra đúng một Application `svp-apps` (không finalizer): chart `argocd/apps` (tầng 2) ở revision R, values gồm nội dung
+từng overlay, từng file `images/`, ba giá trị của `charts.yaml` (`envFiles`), `env`, `platform`, `nodeArch`, `cluster`. R là `gitopsRevision`
+của `envs/<env>/charts.yaml` khi env ghim, không thì chính revision của root. Tầng 2 ra một Application mỗi component: chart, `base/`,
+`platforms/` đọc ở R qua một nguồn duy nhất của repo này (`ref: values`); overlay và image của `envs/<env>/` đi trong `valuesObject`, nên nội dung
+là bản ở revision của root. Không dùng nguồn thứ hai của repo này ở revision khác cho `envs/<env>/`: repo-server của Argo CD từ chối Application
+có file values trỏ một repo ở hai revision. Vì sao hai tầng (generator của ApplicationSet chỉ đưa nội dung một file thành tham số):
+[ADR-0048](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0048-prd-aws.md) §7 của repo code.
+
+- **Ghim prd:** khoá `gitopsRevision` (commit đủ 40 hex của repo này) chỉ ở `envs/prd/charts.yaml`, chỉ promote prd ghi (mục
+  [Promote](#promote)): commit stg đã chạy. Có khoá thì mọi thứ trừ `envs/prd/` (chart `argocd/apps`, `components.json`, `base/`, `platforms/`)
+  là bản ở commit đó, nên một thay đổi của `base/` hay `platforms/` trên `main` tới prd chỉ qua lần promote sau; `envs/prd/` (overlay, image,
+  chart, khoá) vẫn đọc ở `main`, một PR promote đổi cả bộ cùng lúc. Khoá vắng thì như stg: mọi thứ ở `main`. stg không bao giờ ghim.
+- **Bootstrap EKS (stg, prd):** Terraform của `svp-infra`, root `aws/gitops/<env>` theo mẫu GitOps Bridge: namespace có nhãn Pod Security,
+  Argo CD (`argocd/bootstrap.json`, `base/argo-cd.yaml`, `platforms/eks/argo-cd.yaml` bật controller ApplicationSet), AppProject
+  (`argocd/project.yaml`), Secret cluster `in-cluster` của Argo CD mang nhãn `svp.io/env`, `svp.io/platform`, `svp.io/node-arch` và annotation
+  `svp.io/cluster-values` (giá trị `cluster`), rồi ApplicationSet `svp-bootstrap` sinh `svp-root` từ Secret đó. Mọi file ở đây đọc ở commit
+  bootstrap: `gitopsRevision` của env, khoá vắng thì commit của `main` lúc plan. Argo CD và AppProject chỉ đổi khi apply lại root đó.
+- **Bootstrap k3d:** `deploy/k8s/gitops.sh` của repo code tạo `svp-root` cùng spec (platform `k3d`, không `cluster`) ở commit đã kiểm, rồi
+  chuyển sang theo nhánh.
+- **Rollback prd:** promote prd với `stg_ref` cũ mở PR đặt lại `gitopsRevision` cùng image và chart của commit đó; R của `svp-apps` đổi, mọi
+  component sync lại bản cũ.
 
 ## Lớp nền tảng
 
@@ -93,7 +123,7 @@ Một env chạy trên nhiều nền tảng: stg chạy ở cluster lab `k3d` (c
 và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa hai nền tảng nằm ở `platforms/`, không ở `envs/`, nên
 `envs/stg/` (bản phát hành, `charts.yaml`, overlay) dùng chung cho cả hai và promote prd không đổi.
 
-- Root nhận giá trị `platform` (`k3d` | `eks`, bắt buộc, không mặc định, như `env`); bootstrap đặt (`deploy/k8s/gitops.sh` của repo code).
+- Root nhận giá trị `platform` (`k3d` | `eks`, bắt buộc, không mặc định, như `env`); bootstrap đặt (mục trên).
 - Khoá `platforms` đầu `components.json` (ngoài danh sách `components`): mỗi nền tảng nêu `envs` (env chạy trên nền tảng đó: `k3d` chỉ `stg`,
   `eks` cả `stg` và `prd`) và `localHosts: true` khi render của nó được nêu tên lab `*.svp.localhost` (chỉ `k3d`; vắng là không được). Root
   chart không đọc khoá này; check của repo code đọc nó (thiếu hay sai dạng là đỏ), job `diff-preview` cũng render theo nó.
@@ -101,9 +131,11 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `aws-load-balancer-controller` (NLB trước Envoy từ Service
   của Envoy, wave 1 vì Gateway `svp` chỉ `Programmed` khi Service có địa chỉ), `external-dns` (bản ghi Route 53 cho host của HTTPRoute gắn
   vào Gateway `svp`, wave 2). Đường dev (`make k8s-up`) chạy component của `k3d`.
-- `platforms/k3d/` chỉ có README: cluster k3d chạy đúng `base/`, nên root với `platform=k3d` render đúng các Application của `base/`.
-- `platforms/eks/`: Postgres `external` (RDS qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod
-  Identity), StorageClass `gp3` mặc định của `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope
+- `platforms/k3d/`: Secret từ External Secrets với store `kubernetes` (`svp-cluster.yaml`: Secret nguồn ở namespace `svp-secrets` do
+  `deploy/k8s/secrets.sh` của repo code ghi); ngoài đó cluster k3d chạy đúng `base/`.
+- `platforms/eks/`: Secret từ AWS Secrets Manager với store `aws` của External Secrets ở mọi env (entry `svp/<env>/<entry>`, region và role
+  IAM mỗi namespace từ `cluster`; chart `svp-cluster` mở cho controller cổng 443 ra ngoài và agent Pod Identity), Postgres `external` (RDS
+  qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod Identity), StorageClass `gp3` mặc định của `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope
   (Redpanda không ghim class, nhận class mặc định), issuer ACME Let's Encrypt production (DNS-01 Route 53), Service NLB của Envoy và
   NetworkPolicy của nó, nhãn `elbv2.k8s.aws/pod-readiness-gate-inject: enabled` trên namespace `envoy-gateway-system` (root đặt trong
   `managedNamespaceMetadata` của `envoy-gateway`, chỉ `eks`: pod Envoy mới chỉ Ready khi NLB thấy target khoẻ, nên rollout Envoy không
@@ -111,7 +143,7 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   cổng 443, agent Pod Identity `169.254.170.23` cổng 80), Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
   `svp-root` (nhãn `svp.io/notify=root` do bootstrap gắn) ghi commit status `argocd/<env>` lên commit của repo này bằng GitHub App
   `svp-argocd-notifier`, Secret qua External Secrets (`externalSecrets.argocdNotifications` của `svp-cluster.yaml`); Telegram khi sync lỗi
-  hay Degraded chỉ khi bootstrap gắn chat từ `.env`, chat không vào repo.
+  hay Degraded chỉ khi bootstrap gắn chat (annotation `svp.io/telegram-chat-id` của Secret cluster), chat không vào repo.
 - File `<name>.yaml` giữ thứ giống nhau trên mọi cluster của nền tảng; mẫu `<name>.values.tpl` giữ thứ cluster quyết định (VPC, tên, bucket,
   zone), render bằng Helm `tpl` trên `.Values.cluster`, mỗi giá trị qua `quote`/`toJson`. Phần mẫu sinh ra đọc sau overlay của env, nên
   overlay không đặt khoá mà mẫu đặt (mẫu thắng). Danh sách trong values bị thay cả danh sách khi ghép (`platformNamespaces` của
@@ -121,14 +153,15 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
 ### Hợp đồng giá trị `cluster`
 
 Giá trị phụ thuộc account AWS hay buổi không bao giờ vào git: Terraform của `svp-infra` (`aws/envs/<env>`) xuất output `cluster_values`,
-script buổi ghi ra file, bootstrap đặt thành giá trị `cluster` của root `svp-root`. `argocd/apps/values.yaml` để `cluster: {}`; file nào trong
+root `aws/gitops/<env>` ghi nó vào annotation `svp.io/cluster-values` của Secret cluster, ApplicationSet `svp-bootstrap` đặt thành giá trị
+`cluster` của `svp-root`, tầng 1 chuyển nguyên khối cho tầng 2. `argocd/apps/values.yaml` để `cluster: {}`; file nào trong
 git đặt `cluster` thì check đỏ. Root kiểm từng khoá trước khi render mẫu (thiếu hay sai dạng thì dừng, nêu tên khoá). Check của repo này
 render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml` của repo code (tên `.example`, CIDR tài liệu, account toàn số 0).
 
 | Khoá | Dạng | Ai dùng (mẫu ở `platforms/eks/`) |
 | --- | --- | --- |
 | `name` | tên cluster EKS | `clusterName` của `aws-load-balancer-controller`, `txtOwnerId` của `external-dns` |
-| `region` | region AWS | `region` của LBC, `AWS_DEFAULT_REGION` của ExternalDNS, `tls.acme.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
+| `region` | region AWS | `region` của LBC, `AWS_DEFAULT_REGION` của ExternalDNS, `tls.acme.region` và `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
 | `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
 | `vpcCidr` | CIDR | `nodeSubnet` và `envoy.networkPolicy.healthCheckCIDR` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
@@ -141,6 +174,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `mediaBucket` | tên bucket | `S3_MEDIA_BUCKET` của `video-service`, `media-worker` |
 | `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_ORIGIN` của `web` |
 | `s3Cidrs` | danh sách CIDR | `externalPeers.s3` (cổng 443, cùng agent Pod Identity) của `video-service`, `media-worker` |
+| `externalSecretsRoles` | map đúng năm namespace `svp`, `svp-data`, `svp-obs`, `keda`, `argocd` → ARN role IAM | `externalSecrets.aws.roles` của `svp-cluster`: role SecretStore của từng namespace (thiếu namespace thì render dừng) |
 
 Thêm khoá thì sửa cả bốn nơi: output `cluster_values` của `svp-infra`, mẫu và phép kiểm khoá của root ở đây (`argocd/apps/templates/applications.yaml`)
 cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
@@ -170,11 +204,13 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
   `svp-frontend` làm như vậy cho riêng `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`.
 - **prd:** cả bộ. Dispatch promote prd ở repo code (`-f promote_prd=true [-f stg_ref=<main|SHA đủ 40 hex>]`) nhận `stg_ref`, `main` hay
   một commit trên `main` của repo này, và chép **giá trị khối `image` của cả bảy file `envs/stg/images/` cùng ba khoá của
-  `envs/stg/charts.yaml`** ở commit đó sang cùng file dưới `envs/prd/` (comment của file prd giữ nguyên), trên nhánh `bot/promote-prd`;
-  PR không auto-merge. Cổng vào prd là hai bước: người học duyệt environment `promote-prd` của `svp-backend` (admin không bypass, trước khi
-  job lấy khoá App), rồi người học (Code Owner) duyệt PR prd ở đây. Không có bản ghi triển khai stg: `stg_ref` chỉ bảo đảm bộ đó từng nằm trên
-  `main` của `envs/stg/`, không bảo đảm stg đã chạy và smoke qua với đúng bộ đó; cổng là hai lượt duyệt. Không có promote prd theo từng service.
-- **Rollback prd:** dispatch promote prd với `stg_ref` là một commit cũ hơn trên `main` (attestation `vuln` quá 48 giờ thì rescan trước).
+  `envs/stg/charts.yaml`** ở commit đó sang cùng file dưới `envs/prd/` (comment của file prd giữ nguyên), cùng `gitopsRevision: <stg_ref>`
+  (commit đủ) trong `envs/prd/charts.yaml`, trên nhánh `bot/promote-prd`; PR không auto-merge. **Bằng chứng stg:** job từ chối `stg_ref` không
+  có commit status `argocd/stg` trạng thái `success` (Argo CD Notifications của stg ghi khi mọi Application Healthy ở commit đó), nên prd chỉ
+  nhận bộ stg đã đồng bộ xong. Cổng vào prd còn hai lượt duyệt: người học duyệt environment `promote-prd` của `svp-backend` (admin không bypass,
+  trước khi job lấy khoá App), rồi người học (Code Owner) duyệt PR prd ở đây. Không có promote prd theo từng service.
+- **Rollback prd:** dispatch promote prd với `stg_ref` là một commit cũ hơn trên `main` có `argocd/stg` `success` (attestation `vuln` quá 48 giờ
+  thì rescan trước); PR đặt lại cả `gitopsRevision`, nên `base/`, `platforms/` cũng về bản của commit đó.
 - **Ngoại lệ khởi tạo:** ở commit đầu, `envs/prd/images/` và `envs/prd/charts.yaml` là đúng bộ của `envs/stg/` (bảy bản phát hành
   build ở `6ca2d8a795dd`, chart ở commit `main` của repo code lúc tách). Sau đó `envs/prd/` đổi bằng promote prd.
 
@@ -184,13 +220,16 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó (job `gitops`, chỉ quyền `contents: read`, không secret,
 check tổng `gitops-ok`):
 
-1. Cây: `envs/` đúng stg và prd; `charts.yaml` đúng ba khoá, `revision` là commit trên `main` của repo code, hai giá trị dẫn xuất tính lại
-   từ commit đó; mỗi `envs/<env>/images/<svc>.yaml` chỉ khối `image`, repository là `<imagePrefix><svc>` của một nguồn phát hành có `<svc>`
+1. Cây: `envs/` đúng stg và prd; `charts.yaml` đúng ba khoá (prd thêm được `gitopsRevision`: commit trên `main` của repo này có
+   `argocd/apps`), `revision` là commit trên `main` của repo code, hai giá trị dẫn xuất tính lại từ commit đó; mỗi `envs/<env>/images/<svc>.yaml` chỉ khối `image`, repository là `<imagePrefix><svc>` của một nguồn phát hành có `<svc>`
    trong bảng nguồn (`sources.json` của chart `svp-policy`) ở `revision` của env; lớp nền tảng theo khoá `platforms` của `components.json`.
    Luật tác giả hẹp, viết từ bảng nguồn: PR của bot `<promoter>[bot]` một nguồn chỉ đổi `envs/{stg,prd}/images/<svc>.yaml` với `<svc>` của
    nguồn đó; bot của repo code đổi thêm `envs/{stg,prd}/charts.yaml` và mọi file `envs/prd/images/` (promote prd chép cả bộ, web gồm);
    không bot nào xoá file; bot khác (Renovate) không đổi gì dưới `envs/`. PR của người không bị giới hạn ở đây (Code Owner duyệt).
-2. Render root `argocd/apps` theo env × nền tảng của khoá `platforms` × kiến trúc node; mọi `targetRevision` vào repo này là tên đầy đủ.
+2. Render root như Argo CD theo env × nền tảng của khoá `platforms` × kiến trúc node: tầng 1 `argocd/root` ra đúng `svp-apps` ở R, tầng 2
+   `argocd/apps` với values đó; env ghim render tầng 2 trên `git archive` của commit ghim cùng `envs/<env>/` của cây, mọi file values đọc ở
+   commit ghim; `valuesObject` của mỗi Application bằng overlay < image của `envs/<env>/` trên cây < phần mẫu sinh ra, gộp như Helm; mọi
+   `targetRevision` vào repo này là tên đầy đủ, mọi nguồn của repo này trong một Application cùng một revision.
 3. Render chart của repo code ở `revision` của env với `base/`, `platforms/` và overlay; External Secrets qua kubeconform; render của nền
    tảng không `localHosts` không nêu `svp.localhost`.
 4. Mọi image ghim digest (policy Kyverno CLI `images-pinned`); overlay không đổi version image của render nó chồng lên.
@@ -212,11 +251,13 @@ deploy/ci/gitops-check-test.sh <thư mục clone svp-gitops>
 
 Job `diff-preview` của cùng workflow, chỉ ở PR, **ngoài `gitops-ok`** (đỏ không chặn merge), quyền `contents: read`, không secret, không
 comment vào PR: chạy [argocd-diff-preview](https://github.com/dag-andersen/argocd-diff-preview) (image ghim tag + digest, Renovate theo dõi,
-chạy bằng `docker run`, để mọi action của workflow này là của GitHub). Root ở đây là chart Helm nên job render root của mỗi env trên mỗi nền tảng của
-khoá `platforms` (node amd64; `cluster` của `eks` là fixture `deploy/ci/cluster-values.example.yaml` của commit checker) cho hai phía: commit
-merge của PR và cha đầu của nó (nhánh base lúc merge). Tên mỗi Application mang tiền tố `<env>-<nền tảng>-` (`stg-k3d-gateway`,
+chạy bằng `docker run`, để mọi action của workflow này là của GitHub). Root ở đây là hai chart Helm nên job render cả hai tầng của mỗi env
+trên mỗi nền tảng của khoá `platforms` như `gitops-check.sh`: `argocd/root` (node amd64; `cluster` của `eks` là fixture
+`deploy/ci/cluster-values.example.yaml` của commit checker), rồi `argocd/apps` của cùng phía với `valuesObject` của `svp-apps`; chỉ
+Application của tầng 2 vào công cụ. Hai phía: commit merge của PR và cha đầu của nó (nhánh base lúc merge); phía chưa có `argocd/root`
+render thẳng `argocd/apps`. Env ghim `gitopsRevision` hiện như khi ghim ở commit của phía đó (`gitops-ok` render nó ở commit ghim). Tên mỗi Application mang tiền tố `<env>-<nền tảng>-` (`stg-k3d-gateway`,
 `prd-eks-gateway`): ba root cùng tên component. Công cụ dựng cluster kind tạm trên runner, cài Argo CD theo chart và version của
-`argocd/bootstrap.json`, trỏ nguồn values của repo này sang commit của từng phía (phía PR là `refs/pull/<số>/merge`), giữ nguyên nguồn
+`argocd/bootstrap.json`, trỏ nguồn values và env của repo này sang commit của từng phía (phía PR là `refs/pull/<số>/merge`), giữ nguyên nguồn
 chart (chart upstream, chart repo code ở `revision`), rồi lấy manifest Argo CD render; mọi repo đọc ẩn danh qua HTTPS như trên cluster.
 
 Đọc kết quả: tóm tắt của job `diff-preview` (trang lượt chạy, mục Summary) là diff manifest theo Application, chỉ Application có manifest
