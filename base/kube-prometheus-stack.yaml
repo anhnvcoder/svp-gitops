@@ -1,6 +1,6 @@
 # kube-prometheus-stack 92.10.1 (chart https://prometheus-community.github.io/helm-charts), release kube-prometheus-stack
-# in namespace svp-obs, wave 2 of argocd/apps/components.json: the Prometheus operator and its CRDs,
-# Prometheus v3.15.0, Alertmanager v0.34.1, Grafana
+# in namespace svp-obs, wave 3 of argocd/apps/components.json (after Reloader, wave 2): the Prometheus operator and
+# its CRDs, Prometheus v3.15.0, Alertmanager v0.34.1, Grafana
 # 13.2.4 and kube-state-metrics. Prometheus takes the place of the one inside grafana/otel-lgtm in compose, set up the
 # same way (deploy/observability/prometheus/prometheus.yaml), so the dashboards, rules and promtool tests of compose
 # run unchanged. The project's rules, dashboards and Grafana datasources other than Prometheus and Alertmanager come
@@ -307,6 +307,12 @@ grafana:
   podLabels:
     # The sidecars list and watch the dashboard and datasource ConfigMaps through the API server.
     svp-kube-api: allow
+  # Grafana reads the admin user and password from Secret grafana-admin at its start only: Reloader (base/reloader.yaml)
+  # restarts the Deployment when deploy/k8s/secrets.sh or External Secrets changes that Secret. On the pod template,
+  # which Reloader reads when the Deployment has no such annotation: the chart's annotations key would also go on its
+  # ConfigMaps and Roles.
+  podAnnotations:
+    secret.reloader.stakater.com/reload: grafana-admin
   # The chart's own RBAC lets the sidecars get, list and watch ConfigMaps and Secrets in every namespace, and its
   # namespaced Role keeps Secrets. Instead the chart only binds Role kps-grafana (extraManifests below): ConfigMaps of
   # svp-obs, nothing else. The sidecars below read ConfigMaps only.

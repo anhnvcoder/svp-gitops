@@ -1,5 +1,5 @@
-# KEDA 2.21.0 (chart https://kedacore.github.io/charts keda 2.21.0), release keda in namespace keda, wave 2 of
-# argocd/apps/components.json: the operator,
+# KEDA 2.21.0 (chart https://kedacore.github.io/charts keda 2.21.0), release keda in namespace keda, wave 3 of
+# argocd/apps/components.json (after Reloader, wave 2): the operator,
 # its metrics API server (external.metrics.k8s.io, which the HPA controller reads) and its admission webhooks, plus
 # the CRDs. The ScaledObject of media-worker is in chart svp-service (wave 7), the ClusterTriggerAuthentication it logs
 # in with in chart svp-data (wave 4). The chart's pods already meet Pod Security "restricted" (non-root, read-only
@@ -44,6 +44,14 @@ rbac:
   # that the operator logs no "forbidden" (kubectl --context k3d-svp -n keda logs deployment/keda-operator | grep -i
   # forbidden) for 5 minutes.
   create: false
+
+# The operator reads Secret keda-kafka (the login of ClusterTriggerAuthentication keda-kafka to Redpanda) at its
+# start only: Reloader (base/reloader.yaml) restarts it when deploy/k8s/secrets.sh or External Secrets changes that
+# Secret. On the operator's pod template, which Reloader reads when the Deployment has no such annotation:
+# additionalAnnotations would go on every object, the metrics server and the webhooks too, which do not read it.
+podAnnotations:
+  keda:
+    secret.reloader.stakater.com/reload: keda-kafka
 
 image:
   # The tags are the chart's version, which never changes under a pinned chart; Always would reach ghcr.io at every

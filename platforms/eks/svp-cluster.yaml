@@ -25,6 +25,7 @@ platformNamespaces:
   - name: argo-rollouts
   - name: keda
   - name: kyverno
+  - name: reloader
   - name: external-dns
 
 # Let's Encrypt production: smoke tests, k6 and browsers trust no staging certificate. The account's email and the
