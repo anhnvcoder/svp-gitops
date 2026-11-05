@@ -4,5 +4,5 @@
 # base/services/engagement-service.yaml and envs/stg/engagement-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/engagement-service
-  tag: "6b5d13d12525"
-  digest: "sha256:543dd87e63c9d7c3e1aa96b0c8c436a6c409acac6e327ceba8c5f3b9d1f848b4"
+  tag: "6e14d159c24b"
+  digest: "sha256:0724503e9c28c5535222d2f1133d8c3d7037190d06cb0248e7d64deca4f8f292"
