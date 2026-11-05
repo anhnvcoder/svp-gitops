@@ -114,6 +114,14 @@ có file values trỏ một repo ở hai revision. Vì sao hai tầng (generator
   bootstrap: `gitopsRevision` của env, khoá vắng thì commit của `main` lúc plan. Argo CD và AppProject chỉ đổi khi apply lại root đó.
 - **Bootstrap k3d:** `deploy/k8s/gitops.sh` của repo code tạo `svp-root` cùng spec (platform `k3d`, không `cluster`) ở commit đã kiểm, rồi
   chuyển sang theo nhánh.
+- **Health của Application:** hai tầng chờ từng wave theo health Lua của `argoproj.io/Application` ở `base/argo-cd.yaml`. Một Application chỉ
+  `Healthy` khi `status.sync.comparedTo` đúng `spec.source` (hay `spec.sources`) hiện tại, nó `Synced`, sync gần nhất `Succeeded` và
+  `status.health` là `Healthy`. Status còn của spec cũ (ngay sau khi promote đổi image trong `valuesObject`, trước lượt so sánh kế của
+  controller) hay chưa `Synced` cho `Progressing`; sync lỗi đã hết lượt thử của đúng source hiện tại cho `Degraded`, của source cũ cho
+  `Progressing`. Lua đọc `null` như khoá vắng và không phân biệt `{}` với `[]`, nên bước 1 của check từ chối các giá trị đó trong overlay và
+  file image. Nhờ vậy root chỉ `Healthy`, và `argocd/<env>` chỉ `success`, khi bản mới đã chạy. Test không cần cluster:
+  `argocd/root/application-health-test.sh` (Docker, jq) chạy Lua đó bằng `argocd admin settings resource-overrides health` của image Argo CD
+  mà `base/argo-cd.yaml` ghim.
 - **Rollback prd:** promote prd với `stg_ref` cũ mở PR đặt lại `gitopsRevision` cùng image và chart của commit đó; R của `svp-apps` đổi, mọi
   component sync lại bản cũ.
 
@@ -222,7 +230,8 @@ check tổng `gitops-ok`):
 
 1. Cây: `envs/` đúng stg và prd; `charts.yaml` đúng ba khoá (prd thêm được `gitopsRevision`: commit trên `main` của repo này có
    `argocd/apps`), `revision` là commit trên `main` của repo code, hai giá trị dẫn xuất tính lại từ commit đó; mỗi `envs/<env>/images/<svc>.yaml` chỉ khối `image`, repository là `<imagePrefix><svc>` của một nguồn phát hành có `<svc>`
-   trong bảng nguồn (`sources.json` của chart `svp-policy`) ở `revision` của env; lớp nền tảng theo khoá `platforms` của `components.json`.
+   trong bảng nguồn (`sources.json` của chart `svp-policy`) ở `revision` của env; overlay và file image không đặt `null`, `{}` hay `[]` ở bất kỳ
+   độ sâu nào (health Lua của Application không thấy khác biệt đó); lớp nền tảng theo khoá `platforms` của `components.json`.
    Luật tác giả hẹp, viết từ bảng nguồn: PR của bot `<promoter>[bot]` một nguồn chỉ đổi `envs/{stg,prd}/images/<svc>.yaml` với `<svc>` của
    nguồn đó; bot của repo code đổi thêm `envs/{stg,prd}/charts.yaml` và mọi file `envs/prd/images/` (promote prd chép cả bộ, web gồm);
    không bot nào xoá file; bot khác (Renovate) không đổi gì dưới `envs/`. PR của người không bị giới hạn ở đây (Code Owner duyệt).

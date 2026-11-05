@@ -53,22 +53,64 @@ configs:
     # as soon as the previous wave's Applications are applied, not once their operators, CRDs and databases are
     # ready (helm --wait does that on the dev path). This restores it, starting from the Lua of
     # docs/operator-manual/health.md at v3.5.5 (section "Argocd App"), which only passes status.health on. That is not
-    # enough: status.health leaves out hooks (controller/health.go), so an Application whose PostSync Job (svp-data's
-    # pg-bootstrap, which makes the databases and roles) still runs or has failed would already count as Healthy and
-    # let the next wave start. So a child Application is:
-    #   Progressing  while it has no status yet, while a sync runs (hooks included; retries of a failed sync run too),
-    #                or while it is OutOfSync at revisions no finished sync was made for (its automated sync has not
-    #                started yet). Only OutOfSync counts here: Argo CD syncs automatically only an OutOfSync
-    #                Application, so one that stays Synced at a new revision keeps the sync result of an older one;
-    #   Degraded     when its last sync Failed or ended in Error once the retries were spent (the root's sync fails
-    #                with the message, instead of waiting);
-    #   otherwise    its own status.health, as in the documented Lua.
+    # enough on two counts. status.health leaves out hooks (controller/health.go), so an Application whose PostSync Job
+    # (svp-data's pg-bootstrap, which makes the databases and roles) still runs or has failed would already count as
+    # Healthy and let the next wave start. And status is the result of the controller's last comparison: after the
+    # parent applies a new spec (a promote changes an image in valuesObject), the controller compares it only on its
+    # next pass ("spec.source differs", needRefreshAppStatus of controller/appcontroller.go). Until then the old spec's
+    # Synced and Healthy would make the parent, then root svp-root, Healthy at the new commit, and Argo CD Notifications
+    # would write argocd/<env> success on it before the new release runs. So a child Application is:
+    #   Progressing  while it has no status yet; while a sync runs (hooks included; retries of a failed sync run too);
+    #                while status.sync.comparedTo is not its current spec.source (spec.sources for one with several):
+    #                that status is of an older spec; while it is not Synced (OutOfSync: its automated sync or selfHeal
+    #                has yet to run; Unknown: the comparison failed, its conditions say why), but for:
+    #   Degraded     when its last sync Failed or ended in Error once the retries were spent, and that sync was made
+    #                for its current spec.source (spec.sources) and, unless it is Synced, its current revisions, as
+    #                alreadyAttemptedSync of controller/appcontroller.go compares them (a sync with no result counts as
+    #                made for them there too): the automated sync will not try them again. The root's sync fails with
+    #                the message, instead of waiting. A failed sync of an older source leaves it Progressing: while it
+    #                is OutOfSync the automated sync of the current one is to come; once it is Synced none comes, and
+    #                deploy/k8s/gitops.sh's deadline names it;
+    #   otherwise    its own status.health, as in the documented Lua: Healthy only when that is Healthy. The source of
+    #                a sync that Succeeded is not compared: Synced in a comparison of the current spec already says its
+    #                resources are applied, and an Application whose new spec renders what it runs gets no sync at all
+    #                (a promote to prd moves the revision of every component's values source), so it would wait forever.
+    # Sources are compared key by key, lists by position. The controller writes comparedTo and syncResult from Go
+    # structs, whose JSON leaves out zero values (omitempty), while spec keeps what the manifest wrote, so a key absent
+    # on one side equals a zero value ("", false, 0, an empty map or list) on the other. Not inside valuesObject, which
+    # the controller copies as it is (a runtime.RawExtension): there false or 0 is a value Helm reads. Lua cannot see
+    # a null there, which it reads as a key left out, nor tell {} from [], one empty table: the check of this repository
+    # (deploy/ci/gitops-tree-policies/envs.rego of the code repository) refuses both in the overlays and image files,
+    # which fill it.
+    # Test: argocd/root/application-health-test.sh.
     resource.customizations.health.argoproj.io_Application: |
       hs = {}
       hs.status = "Progressing"
-      hs.message = ""
+      hs.message = "waiting for the first comparison"
       if obj.status == nil then
         return hs
+      end
+      local function zero(v)
+        return v == nil or v == "" or v == false or v == 0 or (type(v) == "table" and next(v) == nil)
+      end
+      local function same(a, b, exact)
+        if not exact and zero(a) and zero(b) then
+          return true
+        end
+        if type(a) ~= "table" or type(b) ~= "table" then
+          return a == b
+        end
+        for k, v in pairs(a) do
+          if not same(v, b[k], exact or k == "valuesObject") then
+            return false
+          end
+        end
+        for k, v in pairs(b) do
+          if a[k] == nil and not same(nil, v, exact or k == "valuesObject") then
+            return false
+          end
+        end
+        return true
       end
       local op = obj.status.operationState
       if op ~= nil and op.phase ~= "Succeeded" and op.phase ~= "Failed" and op.phase ~= "Error" then
@@ -76,35 +118,49 @@ configs:
         return hs
       end
       local sync = obj.status.sync
-      if sync ~= nil and sync.status == "OutOfSync" then
-        local want = sync.revisions or {sync.revision}
-        local got = nil
-        if op ~= nil and op.syncResult ~= nil then
-          got = op.syncResult.revisions or {op.syncResult.revision}
-        end
-        local same = got ~= nil and #want == #got
-        if same then
-          for i = 1, #want do
-            if want[i] ~= got[i] then
-              same = false
-            end
+      if sync == nil or sync.comparedTo == nil then
+        return hs
+      end
+      local spec = obj.spec or {}
+      local key = "source"
+      local want = {sync.revision}
+      if not zero(spec.sources) then
+        key = "sources"
+        want = sync.revisions or {}
+      end
+      if not same(spec[key], sync.comparedTo[key]) then
+        hs.message = "status is of an older spec." .. key .. ": waiting for the controller to compare the current one"
+        return hs
+      end
+      if op ~= nil and op.phase ~= "Succeeded" then
+        local res = op.syncResult
+        local attempted = res == nil
+        if res ~= nil then
+          if not same(spec[key], res[key]) then
+            hs.message = "the last sync (" .. op.phase .. ") was of an older spec." .. key ..
+              ": waiting for a sync of the current one"
+            return hs
           end
+          local got = {res.revision}
+          if key == "sources" then
+            got = res.revisions or {}
+          end
+          attempted = sync.status == "Synced" or same(want, got, true)
         end
-        if not same then
-          hs.message = "OutOfSync: waiting for the automated sync of the new revision"
+        if attempted then
+          hs.status = "Degraded"
+          hs.message = "sync " .. op.phase .. ": " .. (op.message or "")
           return hs
         end
       end
-      if op ~= nil and op.phase ~= "Succeeded" then
-        hs.status = "Degraded"
-        hs.message = "sync " .. op.phase .. ": " .. (op.message or "")
+      if sync.status ~= "Synced" then
+        hs.message = tostring(sync.status) .. ": waiting for a sync of the current revision and spec"
         return hs
       end
-      if obj.status.health ~= nil then
+      hs.message = "waiting for the health of its resources"
+      if obj.status.health ~= nil and obj.status.health.status ~= nil then
         hs.status = obj.status.health.status
-        if obj.status.health.message ~= nil then
-          hs.message = obj.status.health.message
-        end
+        hs.message = obj.status.health.message or ""
       end
       return hs
     # Argo CD v3.5.5 ships a health check for Prometheus (resource_customizations/monitoring.coreos.com/Prometheus)
