@@ -18,3 +18,14 @@ envoy:
   networkPolicy:
     # The NLB's health checks come from its nodes' addresses in the VPC.
     healthCheckCIDR: {{ $c.vpcCidr | quote }}
+# The store of every namespace with ExternalSecrets (store aws, svp-cluster.yaml beside this file): entries
+# svp/<env>/<entry> of Secrets Manager in the cluster's region, read through the IAM role of that namespace. A
+# namespace without a role fails here, before Argo CD gets a store that cannot authenticate.
+externalSecrets:
+  prefix: {{ printf "svp/%s/" .Values.env | quote }}
+  aws:
+    region: {{ $c.region | quote }}
+    roles:
+    {{- range $ns := list "svp" "svp-data" "svp-obs" "keda" "argocd" }}
+      {{ $ns }}: {{ required (printf "cluster.externalSecretsRoles.%s: the IAM role of the SecretStore of namespace %s" $ns $ns) (get $c.externalSecretsRoles $ns) | quote }}
+    {{- end }}

@@ -4,7 +4,7 @@
 # every reconcile, before it scales a Rollout's ReplicaSet, so the gateway and the web client never get a pod.
 # Helm replaces a list as a whole, so this list is the controller's plugin list on such nodes.
 # Both paths read this file from archValues of argocd/apps/components.json: Argo CD on a cluster whose nodes run
-# amd64 (value nodeArch of the root chart, set by deploy/k8s/gitops.sh), deploy/k8s/install.sh on the dev path.
+# amd64 (value nodeArch of the root, set by the bootstrap), deploy/k8s/install.sh on the dev path.
 # The asset of the same release as argo-rollouts.yaml's, which install.sh and `make helm-check` check: a new release
 # changes both pins together. The sha256 was computed on the downloaded file and matches the asset digest GitHub shows
 # (the release publishes no checksum file).

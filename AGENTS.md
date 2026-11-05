@@ -13,7 +13,8 @@ stg, prd chỉ đổi được qua pull request vào đây. Đọc trước: [`R
 - `base/`: values gốc của mọi môi trường (`services/<svc>.yaml` không có khối `image`).
 - `platforms/<k3d|eks>/`: khác biệt của nền tảng; thứ phụ thuộc account hay buổi là mẫu `*.values.tpl`, không bao giờ là giá trị trong git.
 - `envs/<stg|prd>/`: overlay (chỉ phần khác gốc), `charts.yaml` (commit của repo code mà chart chạy), `images/<svc>.yaml` (bản phát hành).
-- `argocd/`: AppProject, `bootstrap.json`, chart app-of-apps (`apps/`, danh sách component ở `components.json`).
+- `argocd/`: AppProject, `bootstrap.json`, root hai tầng: `root/` (tầng 1, ra Application `svp-apps` ở revision ghim hay nhánh,
+  đọc `envs/<env>/`) và chart app-of-apps `apps/` (tầng 2, danh sách component ở `components.json`).
 - `.github/workflows/check.yml`, `pr-title.yml`, `scorecard.yml`, `CODEOWNERS`, `renovate.json`.
 - `Makefile` (`make docs-check`), `.markdownlint.yaml`, `lychee.toml`, `LICENSE` (Apache-2.0).
 
@@ -36,8 +37,9 @@ Quy ước chung (ngôn ngữ, tài liệu timeless, ADR, comment, Git, repo pub
 ## Kiểm tra
 
 - Check bắt buộc `gitops-ok` (`.github/workflows/check.yml`): checkout repo code ở `CHECKER_COMMIT` (ghim trong workflow) rồi chạy
-  `deploy/ci/gitops-check.sh` của nó: cây thư mục và luật tác giả của bot, render root `argocd/apps` theo env × nền tảng × kiến trúc
-  node, render chart của repo code ở `revision` của env, mọi image ghim digest, chữ ký, attestation và provenance của image đổi.
+  `deploy/ci/gitops-check.sh` của nó: cây thư mục và luật tác giả của bot, render root hai tầng (`argocd/root` rồi `argocd/apps`)
+  theo env × nền tảng × kiến trúc node, render chart của repo code ở `revision` của env, mọi image ghim digest, chữ ký, attestation
+  và provenance của image đổi.
 - Chạy trên máy từ gốc bản clone đủ lịch sử của repo code: `deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]`;
   `make helm-check` của backend render mọi chart với overlay của bản clone này.
 - `make docs-check`: markdownlint-cli2 và lychee `--offline` trên mọi `.md` (image ghim digest, không mạng); `DOCS='<file hay glob>'`

@@ -1,0 +1,155 @@
+{{- /*
+Level 1 of the root: one Application, svp-apps, chart argocd/apps of this repository at revision R, which makes one
+Application per component of components.json (level 2).
+
+R is gitopsRevision of envs/<env>/charts.yaml when the environment pins a commit of svp-gitops (prd, written only by
+the promote to prd: the commit stg ran), otherwise targetRevision, the revision this chart is read at. Everything of
+the render but envs/<env>/ comes from R: chart argocd/apps (its template and components.json) and, through its source
+with ref "values", base/ and platforms/. envs/<env>/ itself (overlays, images/, charts.yaml) is read here alone, at
+targetRevision: a promote to prd changes the images, the charts and the pin in one pull request, and both levels see
+it at once. Generators of an ApplicationSet only hand the content of one file over as parameters, so the chart at R
+would read the envs/<env>/ of the previous promote; two levels keep every rule of the render in Helm.
+
+Level 2 cannot read envs/<env>/ from its own chart at R, nor through a source of this repository at targetRevision
+beside its source at R: Argo CD's repo-server refuses an Application whose values files reference one repository at
+two revisions ("cannot reference multiple revisions for the same repository"). So this chart reads envs/<env>/ and
+hands over what level 2 needs, value envFiles:
+- charts: revision, podSecurityVersion and collectorConfigSha256 of charts.yaml (level 2 checks their form);
+- overlays: each overlay envs/<env>/<name>.yaml, name to its content;
+- images: each image file envs/<env>/images/<name>.yaml, name to its content.
+Level 2 puts an overlay and an image file into the valuesObject of their component's Application, which Argo CD reads
+after every values file.
+What only the files' content shows is checked here: charts.yaml holds exactly those three keys and gitopsRevision at
+most, a full commit (40 hex); every file is a YAML map; an image file holds the image block alone, with exactly
+repository, tag and digest; an overlay of a release of chart svp-service (one with an image file: level 2 holds the
+image files to exactly the releases of that chart) sets no image, canary or httpRoute.name. What needs components.json
+(an overlay or image file that names no component, a release without an image file) is level 2's, which has it at R.
+Whatever breaks a rule fails the render, so Argo CD reports a ComparisonError on the root instead of running an
+environment with a file silently left out or misread.
+
+svp-apps has no finalizer: deleting svp-root (or ApplicationSet svp-bootstrap, which makes it on EKS) leaves svp-apps
+and everything below it running; each Application of level 2 keeps its own finalizer. It applies its Applications
+client-side (no ServerSideApply), so it compares with Argo CD's default diff, as svp-root does (base/argo-cd.yaml).
+*/}}
+{{- $env := toString (required "env is not set: the name of a directory of envs/ (the bootstrap sets it)" .Values.env) }}
+{{- $envs := list }}
+{{- $overlays := dict }}
+{{- $charts := dict }}
+{{- $chartsText := "" }}
+{{- $seen := false }}
+{{- range $file, $content := .Files.Glob "files/envs/*/*" }}
+{{- $parts := splitList "/" $file }}
+{{- $dir := index $parts 2 }}
+{{- $base := index $parts 3 }}
+{{- /* A hidden file (an editor's or Finder's) is no overlay; git never holds one here. */}}
+{{- if not (hasPrefix "." $base) }}
+{{- $envs = append $envs $dir }}
+{{- if eq $dir $env }}
+{{- $values := fromYaml (toString $content) }}
+{{- if hasKey $values "Error" }}
+{{- fail (printf "envs/%s/%s is not a YAML map: %s" $env $base (get $values "Error")) }}
+{{- end }}
+{{- if eq $base "charts.yaml" }}
+{{- $seen = true }}
+{{- $charts = $values }}
+{{- $chartsText = toString $content }}
+{{- else if hasSuffix ".yaml" $base }}
+{{- $_ := set $overlays (trimSuffix ".yaml" $base) $values }}
+{{- else }}
+{{- fail (printf "envs/%s/%s: an overlay is <name>.yaml, name a component of components.json" $env $base) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if not (has $env $envs) }}
+{{- fail (printf "env is %q: envs/ has no directory of that name (%s)" $env (uniq $envs | sortAlpha | join ", ")) }}
+{{- end }}
+{{- if not $seen }}
+{{- fail (printf "envs/%s/charts.yaml is missing: it pins the commit of the code repository whose charts %s runs" $env $env) }}
+{{- end }}
+{{- $keys := keys $charts | sortAlpha | join "," }}
+{{- if not (has $keys (list "collectorConfigSha256,podSecurityVersion,revision" "collectorConfigSha256,gitopsRevision,podSecurityVersion,revision")) }}
+{{- fail (printf "envs/%s/charts.yaml holds %s: exactly revision, podSecurityVersion and collectorConfigSha256, and gitopsRevision at most" $env (keys $charts | sortAlpha | join ", ")) }}
+{{- end }}
+{{- $revision := toString (required "targetRevision is not set: the revision svp-root follows (refs/heads/main on EKS)" .Values.targetRevision) }}
+{{- if hasKey $charts "gitopsRevision" }}
+{{- /* Read from the line itself: YAML would read a commit of digits alone (or digits around one e) as a number. */}}
+{{- $pin := regexFind "(?m)^gitopsRevision:.*$" $chartsText | trimPrefix "gitopsRevision:" | trim | trimAll "\"'" }}
+{{- if not (regexMatch "^[0-9a-f]{40}$" $pin) }}
+{{- fail (printf "envs/%s/charts.yaml: gitopsRevision is %q, the full commit (40 hex) of svp-gitops at which %s renders argocd/apps, base/ and platforms/" $env $pin $env) }}
+{{- end }}
+{{- $revision = $pin }}
+{{- end }}
+{{- $images := dict }}
+{{- range $file, $content := .Files.Glob (printf "files/envs/%s/images/*" $env) }}
+{{- $base := base $file }}
+{{- if not (hasPrefix "." $base) }}
+{{- if not (hasSuffix ".yaml" $base) }}
+{{- fail (printf "envs/%s/images/%s: an image file is <name>.yaml, name a release of chart svp-service in components.json" $env $base) }}
+{{- end }}
+{{- $values := fromYaml (toString $content) }}
+{{- if hasKey $values "Error" }}
+{{- fail (printf "envs/%s/images/%s is not a YAML map: %s" $env $base (get $values "Error")) }}
+{{- end }}
+{{- $image := get $values "image" }}
+{{- if or (ne (keys $values | sortAlpha | join ",") "image") (not (kindIs "map" $image)) }}
+{{- fail (printf "envs/%s/images/%s holds %s: an image file holds the image block alone" $env $base (keys $values | sortAlpha | join ", ")) }}
+{{- end }}
+{{- if ne (keys $image | sortAlpha | join ",") "digest,repository,tag" }}
+{{- fail (printf "envs/%s/images/%s: image holds %s, exactly repository, tag and digest" $env $base (keys $image | sortAlpha | join ", ")) }}
+{{- end }}
+{{- $_ := set $images (trimSuffix ".yaml" $base) $values }}
+{{- end }}
+{{- end }}
+{{- range $name, $values := $overlays }}
+{{- if hasKey $images $name }}
+{{- $route := get $values "httpRoute" }}
+{{- if or (hasKey $values "image") (hasKey $values "canary") (and (kindIs "map" $route) (hasKey $route "name")) }}
+{{- fail (printf "envs/%s/%s.yaml sets image, canary or httpRoute.name: a release's image is envs/%s/images/%s.yaml, and every environment runs the base's canary" $env $name $env $name) }}
+{{- end }}
+{{- end }}
+{{- end }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: svp-apps
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/compare-options: ServerSideDiff=false
+spec:
+  project: {{ .Values.project }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ $revision | quote }}
+    path: argocd/apps
+    helm:
+      valuesObject:
+        repoURL: {{ .Values.repoURL | quote }}
+        targetRevision: {{ $revision | quote }}
+        chartRepoURL: {{ .Values.chartRepoURL | quote }}
+        project: {{ .Values.project | quote }}
+        env: {{ $env | quote }}
+        platform: {{ .Values.platform | toString | quote }}
+        nodeArch: {{ .Values.nodeArch | toString | quote }}
+        cluster: {{ .Values.cluster | default dict | toJson }}
+        envFiles:
+          charts:
+            revision: {{ get $charts "revision" | default "" | toString | quote }}
+            podSecurityVersion: {{ get $charts "podSecurityVersion" | default "" | toString | quote }}
+            collectorConfigSha256: {{ get $charts "collectorConfigSha256" | default "" | toString | quote }}
+          overlays: {{ $overlays | toJson }}
+          images: {{ $images | toJson }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # An automated sync that failed is not tried again for the same revision unless retries are set.
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

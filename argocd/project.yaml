@@ -1,6 +1,7 @@
 # AppProject svp: what the Applications of the GitOps path may read and where they may write. Applied by the
-# bootstrap (deploy/k8s/gitops.sh of the code repository) before root Application svp-root, which belongs to it like
-# every Application it makes (argocd/apps). Anything outside these lists is
+# bootstrap (deploy/k8s/gitops.sh of the code repository on k3d; on EKS root aws/gitops/<env> of the infrastructure
+# repository, from this file at the commit it bootstraps) before root Application svp-root, which belongs to it like
+# svp-apps and every Application that makes (argocd/root, argocd/apps). Anything outside these lists is
 # refused by Argo CD before it reaches the cluster, whatever a chart or a values file in git asks for. AppProject
 # default, emptied, follows.
 apiVersion: argoproj.io/v1alpha1

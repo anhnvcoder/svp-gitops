@@ -1,0 +1,106 @@
+# Production: three brokers, one per availability zone, so losing a zone or a node keeps a majority of every
+# partition (two of three replicas, Raft). The rest is the base's: SASL SCRAM-SHA-256, the Admin API authenticated,
+# the topics and users of the init Job of chart svp-data (envs/prd/svp-data.yaml gives it the three brokers), the
+# PodDisruptionBudget maxUnavailable 1, which a drain now has to respect. Brokers reach each other on RPC (33145) and
+# the Admin API (9644) through NetworkPolicy redpanda-peers of chart svp-cluster.
+statefulset:
+  replicas: 3
+  podTemplate:
+    spec:
+      # The chart's own anti-affinity, one broker per node (the base drops it for its single broker).
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: redpanda-statefulset
+                  app.kubernetes.io/instance: redpanda
+                  app.kubernetes.io/name: redpanda
+      # One broker per zone as a hard rule. The chart's default spread (ScheduleAnyway) only prefers it: when the node
+      # group runs two nodes in one zone (a zone short of capacity), two brokers would share it, and losing that zone
+      # would lose the majority. With fewer than three zones the third broker stays Pending instead.
+      topologySpreadConstraints:
+        - topologyKey: topology.kubernetes.io/zone
+          maxSkew: 1
+          minDomains: 3
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: redpanda-statefulset
+              app.kubernetes.io/instance: redpanda
+              app.kubernetes.io/name: redpanda
+      # A list replaces the base's whole: both containers again, with the base's image and securityContext.
+      containers:
+        - name: redpanda
+          image: docker.io/redpandadata/redpanda:v26.2.4@sha256:c98c2f04a751e6646012cc701bac5183252cee44c88ba1dfa412e4c7124f2e89
+          securityContext:
+            capabilities:
+              drop: [ALL]
+          # The chart's hooks call the Admin API with an unauthenticated curl, which admin_api_require_auth refuses, so
+          # these replace them with the same steps as svp-admin (RPK_USER, RPK_PASS of this container, from Secret
+          # redpanda-bootstrap): before the broker stops it enters maintenance mode and hands its partition leadership
+          # to the others (rpk cluster maintenance enable --wait), so a rolling restart or a drain never leaves a
+          # partition without its leader; once it starts again it leaves maintenance mode. The broker's id comes from
+          # its own Admin API (/v1/node_config, the endpoint the chart's hooks read), the credentials in a header on
+          # curl's stdin, never on a command line. Each hook is bounded by 45 s, half of terminationGracePeriodSeconds as the chart's,
+          # and always succeeds: a hook that fails would kill the container. The cluster has one maintenance slot, so
+          # the preStop of a second broker draining at the same time does not drain; the PodDisruptionBudget keeps a
+          # drain to one broker at a time.
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - |
+                    node_id() {
+                      printf 'Authorization: Basic %s\n' "$(printf '%s:%s' "$RPK_USER" "$RPK_PASS" | base64 -w0)" |
+                        curl --silent --fail --max-time 5 --header @- http://localhost:9644/v1/node_config |
+                        grep -o '"node_id": *[0-9]*' | grep -o '[0-9]*$'
+                    }
+                    end=$((SECONDS + 35))
+                    until id=$(node_id) && [ -n "$id" ]; do
+                      [ "$SECONDS" -lt "$end" ] || exit 0
+                      sleep 1
+                    done
+                    timeout 10 rpk cluster maintenance disable "$id" >/proc/1/fd/1 2>&1
+                    true
+            preStop:
+              exec:
+                command:
+                  - bash
+                  - -c
+                  - |
+                    node_id() {
+                      printf 'Authorization: Basic %s\n' "$(printf '%s:%s' "$RPK_USER" "$RPK_PASS" | base64 -w0)" |
+                        curl --silent --fail --max-time 5 --header @- http://localhost:9644/v1/node_config |
+                        grep -o '"node_id": *[0-9]*' | grep -o '[0-9]*$'
+                    }
+                    if id=$(node_id) && [ -n "$id" ]; then
+                      timeout 40 rpk cluster maintenance enable "$id" --wait >/proc/1/fd/1 2>&1
+                    fi
+                    true
+        - name: sidecar
+          securityContext:
+            capabilities:
+              drop: [ALL]
+
+# Three replicas of each partition in three zones: the init container redpanda-configurator reads the zone label of
+# its node and sets it as the broker's rack, which needs get on nodes (ClusterRole redpanda-svp-data-rack-awareness of
+# the chart, through its ServiceAccount; both the chart's defaults). Not an enterprise feature.
+rackAwareness:
+  enabled: true
+
+# Half a core per broker (the chart then runs --smp=1 overprovisioned), memory as the base's: three brokers of one core
+# would not fit three m7g.large beside the rest of prd (the code repository's decision record on Kafka in prd,
+# appendix, section Capacity: about 5.35 of 5.79 allocatable vCPU with half a core, 6.85 with one).
+resources:
+  cpu:
+    cores: 500m
+
+# 10 GiB per broker on the platform's default StorageClass (gp3, chart svp-cluster). An EBS volume lives in one zone,
+# so a broker whose node is lost comes back in that zone only; the other two keep the majority meanwhile.
+storage:
+  persistentVolume:
+    size: 10Gi
