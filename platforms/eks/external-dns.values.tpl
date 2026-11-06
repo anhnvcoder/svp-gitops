@@ -5,7 +5,7 @@ txtOwnerId: {{ .Values.cluster.name | quote }}
 # Names under the cluster's domain only (the web client's, api.<domain>).
 domainFilters: {{ list .Values.cluster.domain | toJson }}
 extraArgs:
-  # The lab's hosted zone and no other, whatever else the account holds.
+  # The environment's hosted zone and no other, whatever else the account holds.
   zone-id-filter: {{ list .Values.cluster.hostedZoneId | toJson }}
 env:
   # The region of the AWS API calls; pods cannot read it from the instance metadata (IMDSv2, hop limit 1).
