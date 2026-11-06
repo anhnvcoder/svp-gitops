@@ -244,6 +244,17 @@ check tổng `gitops-ok`):
 4. Mọi image ghim digest (policy Kyverno CLI `images-pinned`); overlay không đổi version image của render nó chồng lên.
 5. File image đổi so với base: chữ ký, attestation `vuln`, provenance env đòi; có provenance thì tag là 12 hex của commit nó nêu.
 
+Logic nằm hết ở script đó, nên cùng một lệnh chạy được trên máy với một bản clone; PR ở đây không đổi được thứ kiểm nó trừ khi sửa
+`check.yml`, file có Code Owner. `gitops-ok` là check duy nhất của workflow này mà ruleset `main` đòi, nên các job trước nó đổi tên hay thêm mà
+không đụng ruleset. Repo public và PR từ fork chạy workflow với cây của fork, nên:
+
+- Không `pull_request_target`, không `workflow_run`: PR không bao giờ chạy với token ghi hay secret.
+- Mọi job chỉ đọc (`contents: read`; riêng `changes` chỉ `pull-requests: read`) và không job nào có secret: job `zizmor` đưa `GITHUB_TOKEN` chỉ đọc cho
+  zizmor, công cụ đọc dữ liệu public bằng nó; `diff-preview` đọc cả hai repo và các repo chart ẩn danh.
+- Mọi action là của GitHub và ghim SHA đầy đủ của commit: tag bị dời sang code khác không đổi gì ở đây.
+- `actions/checkout` không để token trong `.git/config` (`persist-credentials: false`).
+- Giá trị người ngoài điều khiển (tên nhánh, tiêu đề) vào script qua `env`, không qua `${{ }}`.
+
 Job `changes` chia PR theo vùng qua danh sách file của API (quyền `pull-requests: read`, không checkout): PR chỉ đổi tài liệu (`.md`,
 `LICENSE`) bỏ qua `gitops` và `diff-preview`, PR không đổi `.github/` bỏ qua `zizmor`; `docs` luôn chạy; đổi `Makefile` hay `check.yml`,
 push và dispatch thì chạy hết (file đổi tên xét cả tên cũ; API liệt kê thiếu file thì cũng chạy hết). `gitops-ok` nhận đúng các skip đó, skip khác là đỏ. PR của bot luôn đổi `envs/` nên luôn chạy `gitops`.
@@ -258,14 +269,14 @@ deploy/ci/gitops-check-test.sh <thư mục clone svp-gitops>
 
 ### Diff preview
 
-Job `diff-preview` của cùng workflow, chỉ ở PR, **ngoài `gitops-ok`** (đỏ không chặn merge), quyền `contents: read`, không secret, không
-comment vào PR: chạy [argocd-diff-preview](https://github.com/dag-andersen/argocd-diff-preview) (image ghim tag + digest, Renovate theo dõi,
+Job `diff-preview` của cùng workflow, chỉ ở PR (push `main` không có gì để so), **ngoài `gitops-ok`** (đỏ không chặn merge), quyền `contents: read`, không secret, không
+comment vào PR (việc đó cần token ghi): chạy [argocd-diff-preview](https://github.com/dag-andersen/argocd-diff-preview) (image ghim tag + digest, Renovate theo dõi,
 chạy bằng `docker run`, để mọi action của workflow này là của GitHub). Root ở đây là hai chart Helm nên job render cả hai tầng của mỗi env
-trên mỗi nền tảng của khoá `platforms` như `gitops-check.sh`: `argocd/root` (node amd64; `cluster` của `eks` là fixture
+trên mỗi nền tảng của khoá `platforms` như `gitops-check.sh`: `argocd/root` (node amd64: kiến trúc chỉ đổi plugin traffic router của Argo Rollouts; `cluster` của `eks` là fixture
 `deploy/ci/cluster-values.example.yaml` của commit checker), rồi `argocd/apps` của cùng phía với `valuesObject` của `svp-apps`; chỉ
-Application của tầng 2 vào công cụ. Hai phía: commit merge của PR và cha đầu của nó (nhánh base lúc merge); phía chưa có `argocd/root`
+Application của tầng 2 vào công cụ (`svp-apps` chỉ hiện lại chúng). Hai phía: commit merge của PR và cha đầu của nó (nhánh base lúc merge); phía chưa có `argocd/root`
 render thẳng `argocd/apps`. Env ghim `gitopsRevision` hiện như khi ghim ở commit của phía đó (`gitops-ok` render nó ở commit ghim). Tên mỗi Application mang tiền tố `<env>-<nền tảng>-` (`stg-k3d-gateway`,
-`prd-eks-gateway`): ba root cùng tên component. Công cụ dựng cluster kind tạm trên runner, cài Argo CD theo chart và version của
+`prd-eks-gateway`): ba root cùng tên component, không có tiền tố thì công cụ đánh số chúng theo thứ tự file. Công cụ dựng cluster kind tạm trên runner, cài Argo CD theo chart và version của
 `argocd/bootstrap.json`, trỏ nguồn values và env của repo này sang commit của từng phía (phía PR là `refs/pull/<số>/merge`), giữ nguyên nguồn
 chart (chart upstream, chart repo code ở `revision`), rồi lấy manifest Argo CD render; mọi repo đọc ẩn danh qua HTTPS như trên cluster.
 
@@ -284,7 +295,7 @@ chạy trong image ghim tag + digest (`MARKDOWNLINT_IMAGE`, `LYCHEE_IMAGE` trong
 
 Job `zizmor` của cùng workflow, **trong `gitops-ok`**, chạy khi PR đổi `.github/` (job `changes`), khi push và dispatch: lint bảo mật workflow bằng
 [zizmor](https://docs.zizmor.sh/) từ image chính thức ghim tag + digest (`ZIZMOR_IMAGE` trong `env` của `check.yml`, Renovate theo dõi),
-`--persona=regular` trên cả repo như repo code chạy (`make zizmor` ở đó), mọi finding là đỏ và hiện thành annotation trên PR. Token
+`--persona=regular` trên cả repo (mount chỉ đọc) như repo code chạy (`make zizmor` ở đó), mọi finding là đỏ (mã thoát 11 đến 14) và hiện thành annotation trên PR. Token
 `GITHUB_TOKEN` chỉ đọc của job bật các audit online (commit mạo danh, action có lỗ hổng). Finding giữ có chủ đích ghi ở
 `.github/zizmor.yml` (`rules.<id>.ignore`), mỗi mục một comment lý do; hiện chưa có mục nào nên chưa có file. Trên máy chỉ chạy offline,
 không token:
@@ -299,13 +310,22 @@ env -u DOCKER_DEFAULT_PLATFORM docker run --rm --user "$(id -u):$(id -g)" --env=
 
 `.github/workflows/scorecard.yml` chạy [OpenSSF Scorecard](https://github.com/ossf/scorecard) khi push `main`, hằng tuần và khi luật bảo
 vệ nhánh kiểu cũ đổi; không phải check của PR. Kết quả công khai ở API Scorecard
-([viewer](https://scorecard.dev/viewer/?uri=github.com/anhnvcoder/svp-gitops)) và vào code scanning. Check Code-Review luôn thấp (lab một
-người, PR không đòi duyệt): ngoại lệ có chủ đích. Muốn API nhận kết quả thì file theo luật "Workflow Restrictions" ghi ở đầu file.
+([viewer](https://scorecard.dev/viewer/?uri=github.com/anhnvcoder/svp-gitops), `publish_results: true`, huy hiệu) và vào code scanning. Kiểm ghim,
+quyền token, ruleset, mẫu workflow nguy hiểm và các [check khác](https://github.com/ossf/scorecard/blob/main/docs/checks.md); check
+Branch-Protection đọc ruleset bằng `GITHUB_TOKEN` nên không cần `repo_token`. Check Code-Review luôn thấp (lab một
+người, PR không đòi duyệt): ngoại lệ có chủ đích.
+
+Muốn API nhận kết quả thì file theo "Workflow Restrictions" của API Scorecard (README của `ossf/scorecard-action`, mã ở
+`api/app/server/verify_workflow.go` của `ossf/scorecard-infra`): không `env` hay `defaults` ở mức workflow và ở job, không quyền ghi ở mức
+workflow, `id-token: write` chỉ ở job Scorecard, không container hay service, một nhãn runner Ubuntu do GitHub host (`ubuntu-latest` hay
+`ubuntu-YY.MM`, 22.04 trở lên), và chỉ `actions/checkout`, `actions/upload-artifact`, `github/codeql-action/upload-sarif`,
+`ossf/scorecard-action`, `step-security/harden-runner` làm step của job đó, mỗi step là một `uses:` (không step `run:`). API nhận hay không thì hiện
+ở log của step Scorecard. Mọi action ghim SHA đầy đủ của commit; checkout không để token trong `.git/config`.
 
 ## Tiêu đề PR
 
 `main` chỉ nhận squash merge nên tiêu đề PR thành tiêu đề commit. Workflow `pr-title.yml` (job `pr-title`, tách khỏi `check.yml` để sửa
-tiêu đề không chạy lại check, không quyền, không checkout) kiểm tiêu đề theo [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+tiêu đề không chạy lại check, không quyền, không checkout, không code của PR; tiêu đề vào script qua `env`, không qua `${{ }}`) kiểm tiêu đề theo [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
 bằng regex của bash, chung cho bốn repo có CI:
 
 ```text

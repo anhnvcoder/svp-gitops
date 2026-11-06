@@ -1,25 +1,17 @@
-# Check of every pull request and of every push to main of this repository: deploy/ci/gitops-check.sh of the code
-# repository (https://github.com/anhnvcoder/svp-backend), at the commit CHECKER_COMMIT below, on this tree. The
-# logic is that script's alone, so it runs the same on a machine against a clone; a pull request here cannot change
-# what checks it except by changing this file, which has a code owner. Job gitops-ok is the only check of this workflow
-# the ruleset of main requires, so the jobs before it can be renamed or added without touching the ruleset.
-#
-# The repository is public and a pull request from a fork runs this workflow with the fork's tree, so:
-# - no pull_request_target and no workflow_run: a pull request never runs with a write token or with secrets;
-# - every job reads only: contents (the checkouts); no job has a secret (job zizmor hands its read-only GITHUB_TOKEN to
-#   zizmor, which reads public data with it), and job diff-preview reads both repositories and the chart repositories
-#   anonymously;
-# - every action is GitHub's own and pinned to a full commit SHA: a tag moved to other code changes nothing here;
-# - checkout never leaves the token in .git/config (persist-credentials: false);
-# - values an outsider controls (branch names, titles) never go into a script through ${{ }}: only through env.
+# Checks every pull request and push to main with deploy/ci/gitops-check.sh of the code repository at CHECKER_COMMIT.
+# A pull request here changes what checks it only by changing this file, which has a code owner.
+# Job gitops-ok is the only check the ruleset of main requires.
+# Public repository, a fork's pull request runs this file with the fork's tree, so:
+# - no pull_request_target, no workflow_run, no secret; jobs read only; actions are GitHub's own, pinned to a full SHA;
+# - checkout with persist-credentials: false; values an outsider controls reach scripts through env, never ${{ }}.
+# Design notes: README.md.
 name: check
 
 on:
   pull_request:
   push:
     branches: [main]
-  # Run by hand on any branch. No paths filter on any trigger: a required check whose workflow does not run is never
-  # reported and leaves the pull request waiting.
+  # No paths filter on any trigger: a required check whose workflow never runs leaves the pull request waiting.
   workflow_dispatch:
 
 permissions: {}
@@ -30,22 +22,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # zizmor from its official image pinned by digest (multi-arch: the same reference on an arm64 machine and an amd64
-  # runner), run with docker rather than as a third-party action: every action of this workflow is GitHub's own.
+  # zizmor from its official image pinned by digest (multi-arch), run with docker: every action here is GitHub's own.
   # renovate: datasource=docker depName=ghcr.io/zizmorcore/zizmor
   ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
-  # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
-  # by a pull request here (Renovate proposes the newest).
+  # Commit of the code repository whose deploy/ci/gitops-check.sh checks this tree; Renovate proposes the newest.
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
   CHECKER_COMMIT: a6e4ec183e301e86c55dc1a99b00420ce1750ae0
 
 jobs:
   # Which areas a pull request changes, so a job whose area it leaves alone skips and gitops-ok accepts that skip.
-  # Each output is true or false:
-  #   code       any file but documentation (Markdown, LICENSE): jobs gitops, diff-preview;
-  #   workflows  .github/: job zizmor.
-  # docs always runs. A change of the Makefile or of this workflow, a push and a dispatch turn every output true: when
-  # in doubt, run. The list comes from GitHub's API for the pull request, not from git, so no history is fetched.
+  # code: any file but Markdown and LICENSE (jobs gitops, diff-preview); workflows: .github/ (job zizmor).
+  # A change of the Makefile or of this workflow, a push and a dispatch turn every output true: when in doubt, run.
+  # The list comes from GitHub's API, not from git, so no history is fetched.
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -91,9 +79,7 @@ jobs:
             fi
           } | tee -a "$GITHUB_OUTPUT"
 
-  # Renders every environment on amd64 and arm64 nodes with the charts of the code repository at the commit each
-  # environment pins, checks the rules of the tree, the digests of every third-party image, and the signature,
-  # attestations and provenance of every release image that changed.
+  # The check proper: gitops-check.sh renders every environment on amd64 and arm64 and verifies the images that changed.
   gitops:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -141,11 +127,9 @@ jobs:
           echo "base: ${base:-none, every image file}"
           code/deploy/ci/gitops-check.sh gitops "$base"
 
-  # Security lint of the workflows (ADR-0041 (g)): zizmor with the regular persona on the whole repository, mounted
-  # read-only, as the code repositories run it (make zizmor there). Every finding fails (exit codes 11 to 14) and shows
-  # as an annotation; the deliberate ones are left out in .github/zizmor.yml, each with its reason. The job's read-only
-  # GITHUB_TOKEN turns on the online audits (impostor commits, actions with known vulnerabilities). No condition:
-  # gitops-ok is red when this job is red or skipped, on the pull requests of the bots too.
+  # Security lint of the workflows: zizmor (regular persona) on the whole repository, as the code repositories run it.
+  # Findings fail and show as annotations; deliberate ones are left out in .github/zizmor.yml, each with its reason.
+  # The read-only GITHUB_TOKEN turns on the online audits (impostor commits, actions with known vulnerabilities).
   zizmor:
     needs: changes
     if: needs.changes.outputs.workflows == 'true'
@@ -164,8 +148,7 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" --env=GH_TOKEN -v "$PWD:/src:ro" --workdir /src "$ZIZMOR_IMAGE" \
             --persona=regular --no-progress --color=never --cache-dir /tmp/zizmor --format=github .
 
-  # Static check of the Markdown (make docs-check): markdownlint-cli2 and lychee --offline, from the images the Makefile
-  # pins by digest, run with docker on the runner and without network.
+  # Markdown lint and offline link check (make docs-check), from images the Makefile pins by digest, without network.
   docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -177,28 +160,9 @@ jobs:
           persist-credentials: false
       - run: make docs-check
 
-  # A preview, not a check: what the Applications of a pull request render to, next to what main renders, with Argo CD
-  # itself (argocd-diff-preview), as a diff per Application in the job's summary. Outside gitops-ok, so it never blocks
-  # a merge, and it comments nothing on the pull request (that would need a write token). It runs only for a pull
-  # request: a push to main has nothing to compare with.
-  #
-  # The root here is two Helm charts, not Application manifests in files: level 1, argocd/root, makes one Application,
-  # svp-apps, whose valuesObject level 2, argocd/apps, renders into one Application per component. So the job renders
-  # both levels of each environment on each platform the key platforms of components.json lists, as gitops-check.sh
-  # does, for both sides (the merge commit and its first parent, the base it was merged onto), on amd64 nodes
-  # (architecture changes only the traffic router plugin of Argo Rollouts): argocd/root with the same values the
-  # bootstrap sets (env, platform, nodeArch, and on eks cluster from the fixture of the checker commit), then
-  # argocd/apps of the same side with the valuesObject of svp-apps. A side without argocd/root (main before the root
-  # had two levels) renders argocd/apps with those values directly. Only the Applications of level 2 go to the tool;
-  # svp-apps would only show them again. An environment that pins a commit of svp-gitops (gitopsRevision) runs
-  # argocd/apps, base/ and platforms/ at that commit; here it renders them at the side's commit, as it would run
-  # pinned there (gitops-ok renders it at its pin). Each Application gets its environment and platform in front of
-  # its name (stg-k3d-gateway): the three roots make Applications of one name, which the tool would otherwise number
-  # in the order of the files. The tool then creates a kind cluster through the runner's docker, installs Argo CD from
-  # the chart and version argocd/bootstrap.json pins, points every source of this repository (the values, ref values
-  # and ref env) at the side's commit, leaves the chart sources (upstream charts, the code repository at each
-  # revision) as they are, and asks Argo CD for the manifests. Every repository is public and read anonymously, as on
-  # a cluster.
+  # A preview, not a check: what the pull request's Applications render to next to what main renders, as a diff per
+  # Application in the job's summary. Outside gitops-ok, so it never blocks a merge; it comments nothing on the pull
+  # request (that would need a write token). Only a pull request runs it: a push to main has nothing to compare with.
   diff-preview:
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
@@ -207,8 +171,7 @@ jobs:
     permissions:
       contents: read
     env:
-      # argocd-diff-preview from its official image pinned by digest, run with docker: every action of this workflow
-      # is GitHub's own.
+    # Official image pinned by digest, run with docker: every action of this workflow is GitHub's own.
       # renovate: datasource=docker depName=dagandersen/argocd-diff-preview
       ARGOCD_DIFF_PREVIEW_IMAGE: dagandersen/argocd-diff-preview:v0.2.17@sha256:ea90848df29337b50d5058330210b38e39232360b78d9c60951fc92e454c6941
     steps:
