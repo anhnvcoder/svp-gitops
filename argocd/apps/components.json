@@ -156,7 +156,7 @@
       "wave": 3,
       "repo": "https://charts.redpanda.com",
       "chart": "redpanda",
-      "version": "26.2.4",
+      "version": "26.2.5",
       "values": "base/redpanda.yaml"
     },
     {
