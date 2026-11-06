@@ -9,10 +9,12 @@ resources:
   # Measured with kubectl top on the dev path of the CI verification runner (amd64, two runs on 2026-10-25, both SDKs
   # on): a web pod's working set 85-90 MiB 60 s after every pod was Ready, 136-139 MiB at rest after the drills and the
   # end-to-end tests, 144 MiB at most during those tests in both runs; CPU 155m at most under the smoke and end-to-end
-  # tests, 2-3m at rest. Memory limit: 1.5 times the
-  # highest working set rounded up to 64 Mi (256 Mi), but never under 384 Mi, the limit set before any measurement: the
-  # end-to-end tests are a light load, and the load tests set it again, only ever higher. Memory request: the median at
-  # rest (112.5 MiB) rounded up to 32 Mi, at least 128 Mi. CPU stays at 100m and 1 until a load test shows throttling.
+  # tests, 2-3m at rest.
+
+  # Memory limit: 1.5 times the highest working set rounded up to 64 Mi (256 Mi), but never under 384 Mi, the limit set
+  # before any measurement: the end-to-end tests are a light load, and the load tests set it again, only ever higher.
+  # Memory request: the median at rest (112.5 MiB) rounded up to 32 Mi, at least 128 Mi. CPU stays at 100m and 1 until a
+  # load test shows throttling.
   requests: {cpu: 100m, memory: 128Mi}
   limits: {cpu: "1", memory: 384Mi}
 env:
@@ -47,8 +49,9 @@ httpRoute:
 # while a canary is in progress (deploy/k8s/install.sh); it requests /login and one static asset through Envoy.
 canary: true
 # 5xx below 1%, as for the gateway. p99 from a measurement: Envoy's p99 for the stable web backend was 50 ms while k6's
-# cloud profile held its highest passing load on the CI verification runner (2 pods, 110 requests/s, 2026-10-28), and
-# the limit is the smallest of Envoy's default bucket bounds (250, 500, 1000, 2500 ms) not under twice that, so the
+# cloud profile held its highest passing load on the CI verification runner (2 pods, 110 requests/s, 2026-10-28).
+
+# The limit is the smallest of Envoy's default bucket bounds (250, 500, 1000, 2500 ms) not under twice that, so the
 # interpolated p99 is close to the truth around it; twice leaves room for a canary pod that starts cold, a guess to
 # revisit when a good canary is aborted on it. 150 ms, the gateway's, would be under a page rendered after a gateway
 # call.

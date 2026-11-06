@@ -1,9 +1,7 @@
-# AppProject svp: what the Applications of the GitOps path may read and where they may write. Applied by the
-# bootstrap (deploy/k8s/gitops.sh of the code repository on k3d; on EKS root aws/gitops/<env> of the infrastructure
-# repository, from this file at the commit it bootstraps) before root Application svp-root, which belongs to it like
-# svp-apps and every Application that makes (argocd/root, argocd/apps). Anything outside these lists is
-# refused by Argo CD before it reaches the cluster, whatever a chart or a values file in git asks for. AppProject
-# default, emptied, follows.
+# AppProject svp: what the Applications of the GitOps path may read and where they may write. Applied by the bootstrap
+# before root Application svp-root, which belongs to it. Anything outside these lists is refused by Argo CD before it
+# reaches the cluster, whatever a chart or a values file in git asks for. AppProject default, emptied, follows.
+# Design notes: docs/components.md.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
@@ -11,11 +9,10 @@ metadata:
   namespace: argocd
 spec:
   description: Short-video platform on a lab k3d cluster or on Amazon EKS
-  # This repository (the root chart and every values file) and the code repository (its charts, deploy/helm/*, read
-  # only at the commit envs/<env>/charts.yaml pins), both over HTTPS without credentials as repoURL and chartRepoURL of
-  # argocd/apps/values.yaml name them, and the chart repositories of components.json, nothing else.
-  # docker.io/envoyproxy is Envoy Gateway's OCI repository and ghcr.io/stakater/charts Reloader's, written without the
-  # scheme as Argo CD takes them.
+  # This repository and the code repository (its charts, read only at the commit envs/<env>/charts.yaml pins), over
+  # HTTPS without credentials as repoURL and chartRepoURL of argocd/apps/values.yaml name them, and the chart
+  # repositories of components.json, nothing else. docker.io/envoyproxy (Envoy Gateway) and ghcr.io/stakater/charts
+  # (Reloader) are OCI repositories, written without the scheme as Argo CD takes them.
   sourceRepos:
     - https://github.com/anhnvcoder/svp-gitops.git
     - https://github.com/anhnvcoder/svp-backend.git
@@ -35,15 +32,10 @@ spec:
     # Platform eks only: AWS Load Balancer Controller, ExternalDNS.
     - https://aws.github.io/eks-charts
     - https://kubernetes-sigs.github.io/external-dns/
-  # The project's namespaces and those of the platform charts, on this cluster only. argocd holds the Applications the
-  # root makes. kube-system only because KEDA's chart puts RoleBinding keda-operator-auth-reader there: it binds the
-  # Role extension-apiserver-authentication-reader, which exists in kube-system alone, so that KEDA's metrics server
-  # may read ConfigMap extension-apiserver-authentication. Without it Application keda never syncs. On platform eks
-  # kube-system also holds AWS Load Balancer Controller, the namespace its EKS Pod Identity association names.
-  # external-secrets holds External Secrets Operator; svp-secrets the source Secrets its stores read on a lab cluster
-  # (no chart writes one there: chart svp-cluster makes the namespace, its Roles and NetworkPolicy). external-dns holds
-  # ExternalDNS (platform eks). reloader holds Reloader, whose Roles and RoleBindings go into svp, svp-data, svp-obs and
-  # keda, already listed.
+  # The project's namespaces and those of the platform charts, on this cluster only. kube-system only because KEDA's
+  # chart puts RoleBinding keda-operator-auth-reader there, bound to a Role that exists in kube-system alone (without it
+  # Application keda never syncs), and on platform eks for AWS Load Balancer Controller. svp-secrets holds the source
+  # Secrets the stores read on a lab cluster; reloader's Roles and RoleBindings go into listed namespaces.
   destinations:
     - {server: https://kubernetes.default.svc, namespace: svp}
     - {server: https://kubernetes.default.svc, namespace: svp-data}
@@ -61,11 +53,10 @@ spec:
     - {server: https://kubernetes.default.svc, namespace: svp-secrets}
     - {server: https://kubernetes.default.svc, namespace: external-dns}
     - {server: https://kubernetes.default.svc, namespace: reloader}
-  # Cluster-scoped kinds the charts render (helm template of every component with its values, on each platform),
-  # nothing else: no PersistentVolume, PriorityClass, IngressClass, node or admission policy of another kind. Namespaced
-  # kinds are not listed: every one is allowed in the namespaces above. AWS Load Balancer Controller and ExternalDNS
-  # (platform eks) need none beyond the CRDs, RBAC and webhook configurations here; Reloader, which watches the
-  # project's namespaces only, renders none at all.
+  # Cluster-scoped kinds the charts render (helm template of every component with its values, on each platform), nothing
+  # else: no PersistentVolume, PriorityClass, IngressClass, node or admission policy of another kind. Namespaced kinds
+  # are not listed: every one is allowed in the namespaces above. Reloader, which watches the project's namespaces only,
+  # renders none; AWS Load Balancer Controller and ExternalDNS (platform eks) need none beyond CRDs, RBAC and webhooks.
   clusterResourceWhitelist:
     - {group: "", kind: Namespace}
     - {group: apiextensions.k8s.io, kind: CustomResourceDefinition}
@@ -74,12 +65,9 @@ spec:
     - {group: admissionregistration.k8s.io, kind: ValidatingWebhookConfiguration}
     - {group: admissionregistration.k8s.io, kind: MutatingWebhookConfiguration}
     # Envoy Gateway's chart: safe-upgrades.gateway.networking.k8s.io, which refuses an older Gateway API CRD over a
-    # newer one. Chart svp-cluster: svp-cnpg-operator-secrets (templates/cnpg-rbac.yaml), which keeps the CloudNativePG
-    # operator's Secret writes in cnpg-system to its own two Secrets, and svp-external-secrets-writes
-    # (templates/external-secrets.yaml, GitOps path), which keeps External Secrets Operator's Secret writes to the
-    # namespaces of its ExternalSecrets, with svp-store-serviceaccount-pods and svp-store-serviceaccount-tokens (same
-    # file, stg), which refuse a pod or a token Secret for the ServiceAccount that reads the secret sources. No other
-    # chart renders either kind.
+    # newer one. Chart svp-cluster: svp-cnpg-operator-secrets (keeps the CloudNativePG operator's Secret writes in
+    # cnpg-system to its own two Secrets), svp-external-secrets-writes (keeps External Secrets Operator's Secret writes
+    # to the namespaces of its ExternalSecrets) and, in stg, svp-store-serviceaccount-pods and -tokens.
     - {group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicy}
     - {group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicyBinding}
     # KEDA's external metrics API.
@@ -98,9 +86,8 @@ spec:
 ---
 # AppProject default: argocd-server creates it at its start when it is missing, open to every repository, destination
 # and kind, and an Application that names it (or names no project) would escape every limit of svp above. Emptied, it
-# lets nothing be deployed: no repository, no destination, no cluster-scoped kind, every namespaced kind refused.
-# argocd-server only creates it when it does not exist (initializeDefaultProject, server/server.go of Argo CD v3.5.5),
-# so this stays across restarts; deleting it brings the open one back at argocd-server's next start.
+# lets nothing be deployed. argocd-server creates it only when it does not exist, so this stays across restarts;
+# deleting it brings the open one back at the next start.
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:

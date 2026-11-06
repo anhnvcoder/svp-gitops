@@ -1,10 +1,7 @@
-# kube-prometheus-stack 92.10.1 (chart https://prometheus-community.github.io/helm-charts), release kube-prometheus-stack
-# in namespace svp-obs, wave 3 of argocd/apps/components.json (after Reloader, wave 2): the Prometheus operator and
-# its CRDs, Prometheus v3.15.0, Alertmanager v0.34.1, Grafana
-# 13.2.4 and kube-state-metrics. Prometheus takes the place of the one inside grafana/otel-lgtm in compose, set up the
-# same way (deploy/observability/prometheus/prometheus.yaml), so the dashboards, rules and promtool tests of compose
-# run unchanged. The project's rules, dashboards and Grafana datasources other than Prometheus and Alertmanager come
-# from chart svp-observability (wave 5), the NetworkPolicies of svp-obs too.
+# kube-prometheus-stack 92.10.1 (chart https://prometheus-community.github.io/helm-charts), release
+# kube-prometheus-stack in namespace svp-obs, wave 3 of argocd/apps/components.json. Prometheus is set up as in compose
+# (deploy/observability/prometheus/prometheus.yaml), so dashboards, rules and promtool tests run unchanged.
+# Design notes: docs/components.md.
 
 # Short, fixed names (Services kps-prometheus:9090, kps-alertmanager:9093, kps-grafana:80, kps-kube-state-metrics:8080,
 # kps-operator:8080), which the Collector's config, the datasources and the policies name. The subcharts do not
@@ -13,16 +10,12 @@ fullnameOverride: kps
 
 global:
   rbac:
-    # Off for the operator and Prometheus only (the Grafana and kube-state-metrics subcharts have their own switch):
-    # the chart's ClusterRole for the operator grants get, list, watch, create, update and delete on every Secret, and
+    # Off for the operator and Prometheus only (the Grafana and kube-state-metrics subcharts have their own switch): the
+    # chart's ClusterRole for the operator grants get, list, watch, create, update and delete on every Secret, and
     # create on StatefulSets, in every namespace. extraManifests below holds that RBAC instead, narrowed to svp-obs.
-    #
-    # Upgrading the chart: render the new version with its RBAC (helm template kube-prometheus-stack
-    # kube-prometheus-stack --repo https://prometheus-community.github.io/helm-charts --version <new> --namespace
-    # svp-obs --values base/kube-prometheus-stack.yaml --set global.rbac.create=true --set-json
-    # 'extraManifests=null'), compare ClusterRoles kps-operator and kps-prometheus with extraManifests, take every
-    # change while keeping the operator's namespaced rules in its Role, and check that the operator logs no "forbidden"
-    # (kubectl --context k3d-svp -n svp-obs logs deployment/kps-operator | grep -i forbidden) for 5 minutes.
+
+    # Upgrading the chart: compare ClusterRoles kps-operator and kps-prometheus of the new render with extraManifests,
+    # and check that the operator logs no "forbidden" for 5 minutes.
     create: false
 
 # Pod Security "restricted" forbids node-exporter (hostNetwork, hostPID, hostPath); a node here is a container in the
@@ -71,18 +64,16 @@ defaultRules:
 
 # The operator watches namespace svp-obs only, where every PrometheusRule, ServiceMonitor and PodMonitor of the lab
 # lives (a PodMonitor here may still select pods of another namespace: Prometheus, not the operator, discovers them).
-# The kubelet Service and Endpoints the operator keeps for the kubelet scrape are in svp-obs too (the chart puts them
-# in kube-system), so the operator needs no object of another namespace; its RBAC, narrowed to match, is in
-# extraManifests below.
+# The kubelet Service and Endpoints the operator keeps are in svp-obs too (the chart puts them in kube-system), so its
+# RBAC, in extraManifests below, is narrowed to match.
 kubelet:
   namespace: svp-obs
 
 prometheusOperator:
-  # Sync waves inside this Application: the operator (wave 1) starts only once the chart's CRDs (wave 0) are Established,
-  # because Argo CD applies a wave after every resource of the one before is healthy, and a CRD is healthy only when
-  # Established. The operator checks once, at start, whether the API server serves prometheuses; if not, it logs a
-  # warning and never runs its Prometheus controller until restarted, so a cluster built in one wave could come up with
-  # no Prometheus at all. The Prometheus and Alertmanager objects (wave 2) come after the operator.
+  # Sync waves inside this Application: the operator (wave 1) starts once the chart's CRDs (wave 0) are Established. It
+  # checks once, at start, whether the API server serves prometheuses; if not, it never runs its Prometheus controller
+  # until restarted, so a cluster built in one wave could come up with no Prometheus at all. The Prometheus and
+  # Alertmanager objects (wave 2) come after the operator.
   annotations:
     argocd.argoproj.io/sync-wave: "1"
   namespaces:
@@ -104,13 +95,10 @@ prometheusOperator:
   resources:
     requests: {cpu: 20m, memory: 32Mi}
     limits: {memory: 128Mi}
-  # Images by digest (multi-arch index: linux/amd64 and linux/arm64), the chart's tags beside them for the reader: a tag
-  # can be pushed again to other content, a digest cannot. The
-  # chart renders registry/repository:tag when its own digest key, sha, is empty, so tag holds version@digest;
-  # deploy/k8s/check-image-digests.sh fails on an image without one. registry and repository are the chart's defaults
-  # written out: Renovate's helm-values manager finds a pin only as repository and tag under a key ending in "image",
-  # and updates both parts of tag. Prometheus and Alertmanager below also set version and leave
-  # repository out (see there).
+  # Images by digest, the chart's tags beside them: a tag can be pushed again to other content, a digest cannot. The
+  # chart renders registry/repository:tag when its own digest key, sha, is empty, so tag holds version@digest
+  # (pin_check of deploy/ci/gitops-check.sh fails on an image without one). registry and repository are the chart's
+  # defaults written out for Renovate's helm-values manager. Prometheus and Alertmanager below also set version.
   image:
     registry: quay.io
     repository: prometheus-operator/prometheus-operator
@@ -150,20 +138,19 @@ prometheus:
     argocd.argoproj.io/sync-wave: "2"
   prometheusSpec:
     # By digest, as prometheusOperator above (tag holds version@digest), with two differences. Unless version is set,
-    # the chart writes tag into the version field of the Prometheus object, which the operator parses as a version and
-    # could not with a digest in it: so version holds the same version without the digest, and the two always change
-    # together. And repository stays out of this file on purpose: with it, Renovate's helm-values manager would read
-    # tag and move it without version. Instead the "# renovate:" line names the image (the chart's default
-    # registry/repository) for the custom manager that writes version and tag together.
+    # the chart writes tag into the version field of the Prometheus object, which the operator could not parse with a
+    # digest in it: so version holds the same version without the digest, and the two always change together.
+
+    # repository stays out of this file on purpose: Renovate's helm-values manager would move tag without version; the
+    # renovate line below names the image for the custom manager that writes both.
     # renovate: datasource=docker depName=quay.io/prometheus/prometheus
     version: v3.15.0-distroless
     image:
       tag: v3.15.0-distroless@sha256:b2a413d5a03ea6a76782a508d1c7947440bba3b973931a25676e278431891b01
-    # As compose (deploy/observability/prometheus/prometheus.yaml and the command line of the image's
-    # run-prometheus.sh): the OTLP receiver every metric arrives through (the Collector, and the Collector's own
-    # telemetry), the resource attributes promoted to labels, the identifying ones kept, out-of-order samples within
-    # 10 minutes, native histograms, exemplars. Same metric names and labels as compose, so the dashboards and rules
-    # need no change.
+    # As compose (deploy/observability/prometheus/prometheus.yaml): the OTLP receiver every metric arrives through (the
+    # Collector, and the Collector's own telemetry), the resource attributes promoted to labels, the identifying ones
+    # kept, out-of-order samples within 10 minutes, native histograms, exemplars. Same metric names and labels as
+    # compose, so the dashboards and rules need no change.
     enableOTLPReceiver: true
     otlp:
       keepIdentifyingResourceAttributes: true
@@ -223,12 +210,10 @@ prometheus:
     # inside the cluster (Grafana's datasource, OTLP, remote write, Alertmanager) reaches Prometheus at the root.
     externalUrl: http://127.0.0.1:3000/api/datasources/proxy/uid/prometheus
     routePrefix: /
-    # An empty selector picks every object of the namespaces the operator watches, which is svp-obs only (see
-    # prometheusOperator.namespaces): the PrometheusRules and PodMonitor envoy-svp of chart svp-observability carry no
-    # label of this release. A PodMonitor or ServiceMonitor in any other namespace is never read, and nothing reports
-    # it; one for pods of another namespace lives in svp-obs and names that namespace in its namespaceSelector (as
-    # envoy-svp does for envoy-gateway-system). With true the chart would select only objects labelled
-    # release=kube-prometheus-stack.
+    # An empty selector picks every object of the namespaces the operator watches, which is svp-obs only: the
+    # PrometheusRules and PodMonitor envoy-svp of chart svp-observability carry no label of this release. A PodMonitor
+    # or ServiceMonitor in another namespace is never read; one for pods of another namespace lives in svp-obs and names
+    # it in its namespaceSelector (as envoy-svp does for envoy-gateway-system).
     ruleSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
@@ -247,12 +232,11 @@ alertmanager:
     argocd.argoproj.io/sync-wave: "2"
   alertmanagerSpec:
     # The routing of compose (severity=page to Telegram when .env has a bot, everything else only in the UI), from
-    # Secret alertmanager-svp, which deploy/k8s/secrets.sh writes from .env before this chart is installed (key
-    # alertmanager.yaml; the operator reads no other key, and a config without receivers would drop every alert).
-    # useExistingSecret keeps the chart from rendering its own config Secret beside it. The bot token is never in that
-    # config: Secret alertmanager-telegram (empty while Telegram is off) is mounted at
-    # /etc/alertmanager/secrets/alertmanager-telegram/ and the config names the file (bot_token_file). The only way out
-    # of the cluster is TCP 443 to public addresses (policy allow-alertmanager-telegram of chart svp-observability).
+    # Secret alertmanager-svp, which deploy/k8s/secrets.sh writes from .env before this chart is installed (a config
+    # without receivers would drop every alert).
+
+    # The bot token is never in that config: Secret alertmanager-telegram is mounted as a file the config names
+    # (bot_token_file). The only way out of the cluster is TCP 443 to public addresses.
     configSecret: alertmanager-svp
     useExistingSecret: true
     secrets: [alertmanager-telegram]
@@ -392,14 +376,13 @@ grafana:
 
 # The RBAC the chart would render for the operator and Prometheus with global.rbac.create, plus Grafana's Role. Nothing
 # here reads a Secret outside svp-obs.
-#
-# What a taken-over operator keeps: everything it does to run Prometheus and Alertmanager, in svp-obs only (read,
-# write and delete their custom resources, StatefulSets, Services, Endpoints, ConfigMaps and Secrets, the Secrets of
-# Grafana, Alertmanager and GlitchTip included; delete pods); list nodes and namespaces, get storage classes, and
-# write (not read) events in any namespace. Among those Secrets is kps-prometheus-token, the token (it never expires)
-# of ServiceAccount kps-prometheus that the chart renders for the kubelet scrape: with it, the cluster-wide reads of
-# ClusterRole kps-prometheus below (pods, Services, Endpoints, EndpointSlices, Ingresses, nodes and their metrics),
-# still no Secret outside svp-obs.
+
+# A taken-over operator keeps what it does to run Prometheus and Alertmanager, in svp-obs only (their custom resources,
+# StatefulSets, Services, Endpoints, ConfigMaps and Secrets, those of Grafana, Alertmanager and GlitchTip included;
+# delete pods); list nodes and namespaces, get storage classes, write (not read) events anywhere.
+
+# Among those Secrets is kps-prometheus-token, the token (it never expires) of ServiceAccount kps-prometheus: with it,
+# the cluster-wide reads of ClusterRole kps-prometheus below, still no Secret outside svp-obs.
 extraManifests:
   # Cluster-wide, what has no namespace: nodes for the kubelet Endpoints (one address per node), namespaces for the
   # Prometheus' rule and monitor namespace selectors, the storage class of Prometheus' volume. And events: the operator

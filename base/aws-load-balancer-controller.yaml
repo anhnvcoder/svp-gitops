@@ -1,27 +1,22 @@
 # AWS Load Balancer Controller v3.6.2 (chart https://aws.github.io/eks-charts aws-load-balancer-controller 3.6.2),
 # release aws-load-balancer-controller in namespace kube-system, wave 1 of argocd/apps/components.json, on platform eks
-# only. It makes the internet-facing NLB in front of Envoy from the Service of EnvoyProxy svp (chart svp-cluster: its
-# annotations ask for type external, target type ip, client addresses kept), then registers the Envoy pods' addresses in
-# the NLB's target group (TargetGroupBinding). The version is the one whose IAM policy the infrastructure repository
-# gives the controller's role (aws/modules/eks/policies there): a new version comes with that policy, in step.
-#
-# Wave 1, beside svp-cluster and not after it: Gateway svp of svp-cluster reports Programmed (what Argo CD's health
-# check of a Gateway waits for) only once its Service has an address, the NLB's; a later wave would wait for good. Not
-# wave 0 either: its webhook certificate comes from cert-manager (wave 0), and a component of wave 0 gets Pod Security
-# "restricted" on its namespace, which kube-system's system pods do not meet.
-#
-# kube-system and its ServiceAccount aws-load-balancer-controller are the pair the controller's EKS Pod Identity
-# association names (the infrastructure repository): the pod gets the role's credentials from the Pod Identity agent,
-# never from the node (IMDSv2 with a hop limit of 1 keeps pods from the node's role), so the controller is also told
-# the region and the VPC instead of reading them from the instance metadata.
-#
-# What it renders with these values: its CRDs, the Deployment, ServiceAccount, RBAC, the webhook Service and
-# configurations, and two Issuers and two Certificates of cert-manager for the webhook's TLS. No IngressClass,
-# IngressClassParams (no Ingress here) and no Service webhook, so the only cluster-scoped kinds are the CRDs, the
-# ClusterRole, its binding and the webhook configurations (argocd/project.yaml). The ClusterRole is the chart's, with no
-# value to narrow it, in every namespace: read pods, nodes, endpoints, Gateway API objects; write Services, Ingresses,
-# TargetGroupBindings, ConfigMaps and the status of Gateways and routes. No right on Secrets (the chart's
-# clusterSecretsPermissions stays off): the webhook's key pair is a mounted volume.
+# only. It makes the internet-facing NLB in front of Envoy from the Service of EnvoyProxy svp (chart svp-cluster).
+# Design notes: docs/components.md.
+
+# The version is the one whose IAM policy the infrastructure repository gives the controller's role
+# (aws/modules/eks/policies there): a new version comes with that policy, in step.
+
+# Wave 1, beside svp-cluster and not after it: Gateway svp of svp-cluster reports Programmed only once its Service has
+# an address, the NLB's; a later wave would wait for good. Not wave 0: its webhook certificate comes from cert-manager
+# (wave 0), and a component of wave 0 gets Pod Security "restricted", which kube-system's system pods do not meet.
+
+# kube-system and ServiceAccount aws-load-balancer-controller are the pair the controller's EKS Pod Identity association
+# names (the infrastructure repository): the pod gets the role's credentials from the Pod Identity agent, never from
+# the node (IMDSv2 with a hop limit of 1 keeps pods from the node's role), so it is told the region and the VPC.
+
+# The only cluster-scoped kinds are the CRDs, the ClusterRole, its binding and the webhook configurations
+# (argocd/project.yaml). The ClusterRole is the chart's, with no value to narrow it, in every namespace. No right on
+# Secrets (the chart's clusterSecretsPermissions stays off): the webhook's key pair is a mounted volume.
 
 # The cluster's name, region and VPC come from value cluster (platforms/eks/aws-load-balancer-controller.values.tpl).
 

@@ -1,36 +1,25 @@
-{{- /*
-Level 1 of the root: one Application, svp-apps, chart argocd/apps of this repository at revision R, which makes one
-Application per component of components.json (level 2).
+{{- /* Level 1 of the root: one Application, svp-apps, chart argocd/apps of this repository at revision R, which makes
+one Application per component of components.json (level 2). R is gitopsRevision of envs/<env>/charts.yaml when
+the environment pins a commit of svp-gitops (prd, written only by the promote to prd), otherwise targetRevision. */}}
+{{- /* Design notes: docs/components.md. */}}
 
-R is gitopsRevision of envs/<env>/charts.yaml when the environment pins a commit of svp-gitops (prd, written only by
-the promote to prd: the commit stg ran), otherwise targetRevision, the revision this chart is read at. Everything of
-the render but envs/<env>/ comes from R: chart argocd/apps (its template and components.json) and, through its source
-with ref "values", base/ and platforms/. envs/<env>/ itself (overlays, images/, charts.yaml) is read here alone, at
-targetRevision: a promote to prd changes the images, the charts and the pin in one pull request, and both levels see
-it at once. Generators of an ApplicationSet only hand the content of one file over as parameters, so the chart at R
-would read the envs/<env>/ of the previous promote; two levels keep every rule of the render in Helm.
+{{- /* Everything of the render but envs/<env>/ comes from R; envs/<env>/ is read here alone, at targetRevision: a
+promote to prd changes the images, the charts and the pin in one pull request, and both levels see it at once.
+Generators of an ApplicationSet only hand the content of one file over as parameters, so the chart at R would read the
+envs/<env>/ of the previous promote; two levels keep every rule of the render in Helm. */}}
 
-Level 2 cannot read envs/<env>/ from its own chart at R, nor through a source of this repository at targetRevision
-beside its source at R: Argo CD's repo-server refuses an Application whose values files reference one repository at
-two revisions ("cannot reference multiple revisions for the same repository"). So this chart reads envs/<env>/ and
-hands over what level 2 needs, value envFiles:
-- charts: revision, podSecurityVersion and collectorConfigSha256 of charts.yaml (level 2 checks their form);
-- overlays: each overlay envs/<env>/<name>.yaml, name to its content;
-- images: each image file envs/<env>/images/<name>.yaml, name to its content.
-Level 2 puts an overlay and an image file into the valuesObject of their component's Application, which Argo CD reads
-after every values file.
-What only the files' content shows is checked here: charts.yaml holds exactly those three keys and gitopsRevision at
-most, a full commit (40 hex); every file is a YAML map; an image file holds the image block alone, with exactly
-repository, tag and digest; an overlay of a release of chart svp-service (one with an image file: level 2 holds the
-image files to exactly the releases of that chart) sets no image, canary or httpRoute.name. What needs components.json
-(an overlay or image file that names no component, a release without an image file) is level 2's, which has it at R.
-Whatever breaks a rule fails the render, so Argo CD reports a ComparisonError on the root instead of running an
-environment with a file silently left out or misread.
+{{- /* Level 2 cannot read envs/<env>/ through a source of this repository at targetRevision beside its source at R:
+Argo CD's repo-server refuses an Application whose values files reference one repository at two revisions. So
+this chart reads envs/<env>/ and hands over what level 2 needs, value envFiles (charts, overlays, images). */}}
 
-svp-apps has no finalizer: deleting svp-root (or ApplicationSet svp-bootstrap, which makes it on EKS) leaves svp-apps
-and everything below it running; each Application of level 2 keeps its own finalizer. It applies its Applications
-client-side (no ServerSideApply), so it compares with Argo CD's default diff, as svp-root does (base/argo-cd.yaml).
-*/}}
+{{- /* What only the files' content shows is checked here, and whatever breaks a rule fails the render, so Argo CD
+reports a ComparisonError on the root instead of running an environment with a file silently left out or misread.
+What needs components.json is level 2's, which has it at R. */}}
+
+{{- /* svp-apps has no finalizer: deleting svp-root (or ApplicationSet svp-bootstrap, which makes it on EKS) leaves
+svp-apps and everything below it running; each Application of level 2 keeps its own finalizer. It applies its
+Applications client-side (no ServerSideApply), so it compares with Argo CD's default diff, as svp-root does
+(base/argo-cd.yaml). */}}
 {{- $env := toString (required "env is not set: the name of a directory of envs/ (the bootstrap sets it)" .Values.env) }}
 {{- $envs := list }}
 {{- $overlays := dict }}

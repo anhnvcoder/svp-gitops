@@ -6,13 +6,10 @@
 help: ## List the targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
-# Static check of the Markdown: markdownlint-cli2 with .markdownlint.yaml (style), then lychee --offline --include-fragments
-# (relative links and heading anchors; links to other sites are not followed: the network is not stable and a check that
-# depends on it fails for reasons outside the change), both from their official images pinned by digest (multi-arch),
-# without network, the repository mounted read-only at /repo: a relative link that leaves the repository (to plans/,
-# which is no repository's) is an error on purpose. DOCS narrows the files (paths or globs, relative to the repository);
-# the default is every Markdown file git tracks plus the new ones it does not track yet. Both tools always run; the exit
-# code is not 0 when either reports a problem.
+# markdownlint-cli2 (style), then lychee --offline --include-fragments (relative links and heading anchors; other sites
+# are not followed: a check that depends on the network fails for reasons outside the change). Pinned images, no
+# network, repository read-only: a link that leaves it (to plans/, which is no repository's) is an error on purpose.
+# DOCS narrows the files; the default is every Markdown file git tracks plus untracked ones. Both tools always run.
 # renovate: datasource=docker depName=davidanson/markdownlint-cli2
 MARKDOWNLINT_IMAGE := davidanson/markdownlint-cli2:v0.24.0@sha256:70ead7c0352d22d04bbe612cd96b54ec591538d8f4626cafe391bb2ecf3639ca
 # renovate: datasource=docker depName=lycheeverse/lychee

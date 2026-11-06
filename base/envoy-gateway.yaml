@@ -1,7 +1,7 @@
 # Envoy Gateway v1.9.2 (chart oci://docker.io/envoyproxy/gateway-helm), release envoy-gateway in namespace
-# envoy-gateway-system. The chart also brings the Gateway
-# API CRDs v1.6.1 (experimental channel). The proxy's own settings (Service, resources) are the EnvoyProxy of chart
-# svp-cluster.
+# envoy-gateway-system. The chart also brings the Gateway API CRDs v1.6.1 (experimental channel). The proxy's own
+# settings (Service, resources) are the EnvoyProxy of chart svp-cluster.
+# Design notes: docs/components.md.
 
 deployment:
   envoyGateway:
@@ -16,19 +16,21 @@ config:
   envoyGateway:
     provider:
       kubernetes:
-        # The controller watches these namespaces only, and the chart binds its namespaced rules (get/list/watch on
-        # Secrets, ConfigMaps, Services, EndpointSlices, Deployments, the Gateway API and Envoy Gateway kinds) in a
-        # Role in each instead of cluster-wide; what stays cluster-wide is read access to nodes and namespaces,
-        # GatewayClasses and ServiceImports, no Secret, no pod. svp-edge: Gateway svp and its certificate Secrets
-        # svp-wildcard-tls and svp-apex-tls. svp and svp-data: HTTPRoutes api, web and s3 and their backend Services
-        # (the namespaces labelled svp-gateway-routes in chart svp-cluster; a namespace given routes there must be added
-        # here, or its routes are never seen). envoy-gateway-system: EnvoyProxy svp of GatewayClass svp, the
-        # controller's own certificate Secrets and the Envoy fleet it runs there.
-        #
-        # This narrows the exception without closing it: Envoy Gateway v1.9.2 caches Secrets in every watched
-        # namespace, for the TLS and policy Secrets a Gateway, route or policy there may name, and no value narrows
-        # that by name, so the controller still reads the Secrets of svp and svp-data. Moving the routes out of those
-        # namespaces would not help: their backend Services keep them watched, with the same Role.
+        # The controller watches these namespaces only, with its namespaced rules in a Role in each instead of
+        # cluster-wide; cluster-wide stays read access to nodes, namespaces, GatewayClasses and ServiceImports: no
+        # Secret, no pod.
+
+        # svp-edge: Gateway svp and its certificate Secrets svp-wildcard-tls and svp-apex-tls. svp and svp-data:
+        # HTTPRoutes api, web and s3 and their backend Services (the namespaces labelled svp-gateway-routes in chart
+        # svp-cluster; a namespace given routes there must be added here, or its routes are never seen).
+
+        # envoy-gateway-system: EnvoyProxy svp of GatewayClass svp, the controller's own certificate Secrets and the
+        # Envoy fleet it runs there.
+
+        # This narrows the exception without closing it: Envoy Gateway v1.9.2 caches Secrets in every watched namespace,
+        # for the TLS and policy Secrets a Gateway, route or policy there may name, and no value narrows that by name,
+        # so the controller still reads the Secrets of svp and svp-data. Moving the routes out of those namespaces would
+        # not help: their backend Services keep them watched, with the same Role.
         watch:
           type: Namespaces
           namespaces: [envoy-gateway-system, svp, svp-data, svp-edge]
@@ -48,7 +50,7 @@ topologyInjector:
 # Images by digest (multi-arch index: linux/amd64 and linux/arm64), the chart's tag beside it for the reader: a tag can
 # be pushed again to other content, a digest cannot. The chart splits
 # these at the first "/" and ":" only, so version@digest stays whole after the colon;
-# deploy/k8s/check-image-digests.sh fails on an image without one.
+# pin_check of deploy/ci/gitops-check.sh fails on an image without one.
 global:
   images:
     # The controller, its certgen Job, and the shutdown-manager sidecar it adds to every Envoy pod.
@@ -57,8 +59,7 @@ global:
     # Only started when a rate limit policy exists (none here); the same digest v1.9.2 has built in.
     ratelimit:
       image: docker.io/envoyproxy/ratelimit:0482748e@sha256:5fdd8e3ae335ab6d64316f8d2fd9a886830075cbbb40a1d8065c869275909162
-    # envoyProxy.image stays unset: the Envoy proxy pods run the image the controller has built in,
+    # envoyProxy.image stays unset: the proxy pods run the image the controller has built in, already a digest, which
+    # moves with the chart's version, the Envoy release this controller was tested with:
     # docker.io/envoyproxy/envoy:distroless-v1.39.1@sha256:eb2c01c13125d1629637cb4e4cce7207009fb7cc2c8027f9742758549d15b6f4
-    # (DefaultEnvoyProxyImage, api/v1alpha1/shared_types.go@v1.9.2), already a digest, and it moves with the chart's
-    # version, the Envoy release this controller was tested with. The chart never renders it, so the check above does
-    # not see it.
+    # The chart never renders it, so the check above does not see it.

@@ -1,7 +1,6 @@
 # Production. Errors carry environment prd. The domains and the media origin are the cluster's (platforms/eks/,
 # from value cluster). Two replicas spread over the nodes with a disruption budget are already the base's (HPA
 # minimum 2): a floor of policy, not a measured size, since no load test has run on stg yet; the requests of every pod
-# of prd with these floors fit the three nodes (the code repository's decision record on Kafka in prd, appendix,
-# section Capacity).
+# of prd with these floors fit the three nodes.
 env:
   SENTRY_ENVIRONMENT: prd

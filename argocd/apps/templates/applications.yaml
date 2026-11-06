@@ -1,38 +1,36 @@
-{{- /*
-One Application per component of components.json, the single list the dev path of the code repository
+{{- /* One Application per component of components.json, the single list the dev path of the code repository
 (deploy/k8s/install.sh there) installs from too, so both paths install the same charts, versions and values in the same
-order:
-- the release name is the component's name, as on the dev path;
-- argocd.argoproj.io/sync-wave is the component's wave, so a policy or CRD exists before what needs it. The root
-  Application moves to the next wave only once every Application of this one has finished its sync, hooks included,
-  and reports Healthy (the health check for Applications in base/argo-cd.yaml), as helm --wait does on the dev path;
-- an upstream chart (repo + chart + version) comes from its chart repository; a chart of the code repository (path)
-  from chartRepoURL at the commit envs/<env>/charts.yaml pins (revision). Both read their values files, base/ and
-  platforms/, from this repository through a source with ref "values" at targetRevision, the revision this chart runs
-  at, its one source of this repository: Argo CD's repo-server refuses an Application whose values files reference one
-  repository at two revisions. The environment's overlay and image come in valuesObject (below). Helm OCI
-  repositories are written oci://<registry>/<path> in components.json, the form helm takes; Argo CD wants them without
-  the scheme;
-- every targetRevision is quoted: a branch named 2026 or true, or a chart version such as 1.10, would otherwise be read
-  as a number or a boolean (1.10 as 1.1), and the Application CRD wants a string;
-- canaryRoute names the HTTPRoute of a release of chart svp-service with canary set in its values file (the gateway's
-  api, the web client's web): such a release gets the ignoreDifferences below. The chart cannot read that values file
-  from here, so the two are kept in step by hand, and the dev path refuses a release whose values set canary without a
-  canaryRoute here, or the reverse;
-- archValues maps a node architecture to one more values file, read after values on a cluster whose nodes run it
-  (value nodeArch): Argo Rollouts' Gateway API plugin is a native binary that the controller downloads and runs, so the
-  nodes of a Linux x86_64 host need another file than those of a Mac. The dev path reads the same entry;
-- gitopsOnly marks a component of this path alone, which the dev path skips: External Secrets Operator, which builds
-  the Secrets here from the ExternalSecrets of chart svp-cluster, where the dev path applies them from .env;
-- platforms lists the platforms (value platform) a component runs on, every platform when it has none: a component of
-  another platform gets no Application at all. The dev path runs k3d's components;
-- a component of wave 0 gets Pod Security "restricted" on its namespace (managedNamespaceMetadata below), so none goes
-  into kube-system, whose system pods (on EKS the CNI's and kube-proxy's) that would refuse: AWS Load Balancer
-  Controller, which runs there, is in wave 1. On platform eks, envoy-gateway's namespace also gets the label that has
-  that controller give the Envoy pods a readiness gate (below).
-Nothing here names the source Secrets the bootstrap writes into namespace svp-secrets: no chart renders them, so no
-Application tracks them and pruning never deletes them.
-*/}}
+order. */}}
+{{- /* Design notes: docs/components.md. */}}
+
+{{- /* argocd.argoproj.io/sync-wave is the component's wave, so a policy or CRD exists before what needs it. The root
+Application moves to the next wave only once every Application of this one has finished its sync, hooks included, and
+reports Healthy (the health check for Applications in base/argo-cd.yaml), as helm --wait does on the dev path. */}}
+
+{{- /* An upstream chart comes from its chart repository, a chart of the code repository from chartRepoURL at the commit
+envs/<env>/charts.yaml pins. Both read base/ and platforms/ from this repository through a source with ref "values" at
+targetRevision: Argo CD's repo-server refuses values files that reference one repository at two revisions. OCI
+repositories are written oci://<registry>/<path> in components.json; Argo CD wants them without the scheme. */}}
+
+{{- /* Every targetRevision is quoted: a branch named 2026 or true, or a chart version such as 1.10, would otherwise be
+read as a number or a boolean (1.10 as 1.1), and the Application CRD wants a string. */}}
+
+{{- /* canaryRoute names the HTTPRoute of a release of chart svp-service with canary set in its values file, which the
+chart cannot read: the two are kept in step by hand, and the dev path refuses a release whose values set canary without
+a canaryRoute here, or the reverse. */}}
+
+{{- /* archValues: Argo Rollouts' Gateway API plugin is a native binary, so the nodes of a Linux x86_64 host need
+another values file than those of a Mac. gitopsOnly: External Secrets Operator builds the Secrets here from the
+ExternalSecrets of chart svp-cluster, where the dev path applies them from .env. platforms: a component of another
+platform gets no Application at all. */}}
+
+{{- /* A component of wave 0 gets Pod Security "restricted" on its namespace (managedNamespaceMetadata below), so none
+goes into kube-system, whose system pods (on EKS the CNI's and kube-proxy's) that would refuse: AWS Load Balancer
+Controller, which runs there, is in wave 1. On platform eks, envoy-gateway's namespace also gets the label that has that
+controller give the Envoy pods a readiness gate (below). */}}
+
+{{- /* Nothing here names the source Secrets the bootstrap writes into namespace svp-secrets: no chart renders them, so
+no Application tracks them and pruning never deletes them. */}}
 {{- $components := (.Files.Get "components.json" | fromJson).components }}
 {{- /*
 The release images are built for linux/amd64 and linux/arm64 only, so no cluster of this project runs anything else;
@@ -41,31 +39,25 @@ another value is a mistake that would deploy the arm64 plugin to nodes that cann
 {{- if not (has .Values.nodeArch (list "amd64" "arm64")) }}
 {{- fail (printf "nodeArch is %q: the nodes of a cluster of this project are amd64 or arm64" (toString .Values.nodeArch)) }}
 {{- end }}
-{{- /*
-The environment's files, value envFiles, which level 1 of the root (chart argocd/root, Application svp-root) reads
-from envs/<env>/ at the revision it follows and hands over, the content of each file: this chart may run at an older
-commit (gitopsRevision of the environment's charts.yaml), whose envs/ is not the environment's. envs/<env>/ holds
-- charts.yaml (envFiles.charts): the commit of the code repository whose charts the environment runs, and two values
-  derived from that commit (the check of this repository computes them again from it): the Pod Security Standard
-  version chart svp-cluster pins (podSecurityVersion of its values), for the namespaces of wave 0 below, and the
-  sha256 of the Collector's config (deploy/observability/otelcol/k8s-config.yaml there). The Collector reads ConfigMap
-  otel-collector-config (chart svp-observability) only when it starts, and its own chart cannot checksum a ConfigMap
-  it does not render: the checksum goes into the pod template, so a changed config rolls the pod and an unchanged one
-  does not. charts is therefore no component name;
-- images/<name>.yaml (envFiles.images, name to content) for every release of chart svp-service: its image block
-  (repository, tag, digest) and nothing else, read after the overlay. A release with no file there would run no image
-  of this environment, so a missing one fails;
-- an overlay <name>.yaml (envFiles.overlays, name to content) for each component (its name in components.json) whose
-  values differ there from the base, and nothing but those differences, read after the base and the platform's values
-  file. An overlay never holds an image
-  (every environment runs images built and signed once, which images/ names), nor canary or httpRoute.name of a
-  release of chart svp-service (canaryRoute below mirrors those two for every environment), nor a secret.
-Level 1 checks what the files' content shows (charts.yaml's keys, YAML maps, an image file's block, an overlay of a
-release that sets image, canary or httpRoute.name); this chart what needs components.json, and the form of the values
-of charts.yaml. Whatever breaks these rules fails the render, so Argo CD reports a ComparisonError on the root instead
-of running an environment with a file silently left out or misread. The images of the other charts are held to the
-base's by the check of this repository, which renders every overlay.
-*/}}
+{{- /* The environment's files, value envFiles, which level 1 of the root reads from envs/<env>/ at the revision it
+follows: this chart may run at an older commit (gitopsRevision), whose envs/ is not the environment's. */}}
+
+{{- /* charts.yaml (envFiles.charts): the commit of the code repository whose charts the environment runs, and two
+values derived from it (the check of this repository computes them again): the Pod Security Standard version for the
+namespaces of wave 0, and the sha256 of the Collector's config. The Collector reads its ConfigMap only when it starts
+and its chart cannot checksum a ConfigMap it does not render: the checksum in the pod template rolls the pod. */}}
+
+{{- /* images/<name>.yaml (envFiles.images) for every release of chart svp-service: its image block and nothing else,
+read after the overlay. A release with no file there would run no image of this environment, so it fails. */}}
+
+{{- /* <name>.yaml (envFiles.overlays): the values of a component that differ from the base, and nothing but those, read
+after the base and the platform's values file. An overlay never holds an image (every environment runs images built and
+signed once, which images/ names), nor canary or httpRoute.name of a release of chart svp-service (canaryRoute below
+mirrors those two for every environment), nor a secret. */}}
+
+{{- /* Whatever breaks these rules fails the render, so Argo CD reports a ComparisonError on the root instead of running
+an environment with a file silently left out or misread. The images of the other charts are held to the base's by the
+check of this repository, which renders every overlay. */}}
 {{- $env := toString (required "env is not set: the name of a directory of envs/ (level 1 of the root sets it)" .Values.env) }}
 {{- $names := dict }}
 {{- range $components }}
@@ -120,26 +112,20 @@ base's by the check of this repository, which renders every overlay.
 {{- fail (printf "envs/%s/images/%s.yaml is missing: every release of chart svp-service runs the image its environment names" $env .name) }}
 {{- end }}
 {{- end }}
-{{- /*
-The platform's directory. files/platforms is a symlink to platforms/: one directory per platform, k3d (the lab's
-clusters) and eks (Amazon EKS), holding
-- README.md: what the platform is, read by people only;
-- <name>.yaml for each component (its name in components.json) whose values on every cluster of the platform differ
-  from the base, and nothing but those differences, read after the base and before the environment's overlay: one
-  environment runs on both platforms (stg), and its overlay keeps the last word over the platform's. The overlay's
-  rules hold here: no image, canary or httpRoute.name of a release of chart svp-service;
-- <name>.values.tpl for each component that needs what depends on the cluster it runs on (an AWS account, a session):
-  a template, rendered here with tpl on value cluster, which the bootstrap sets from the infrastructure repository's
-  output and git never holds. What it renders goes last into helm.valuesObject of the Application, after the
-  environment's overlay and image (below): a template sets only what its cluster decides, which no file of an
-  environment sets. Each value goes in with quote or toJson, never as raw text, so a name or an address cannot change
-  the YAML around it.
-- argo-cd.yaml: the platform's values of Argo CD itself, which the bootstrap installs after the values file of
-  argocd/bootstrap.json (deploy/k8s/gitops.sh of the code repository on k3d, root aws/gitops/<env> of the
-  infrastructure repository on EKS); no Application, so nothing here reads it.
-A platform file that names no component of that platform, is no YAML map or sets cluster, a template that renders no
-YAML map, an image or canary key in a service's, a cluster without a key of the contract below, all fail the render.
-*/}}
+{{- /* The platform's directory (files/platforms is a symlink to platforms/): one per platform, k3d (the lab's clusters)
+and eks (Amazon EKS). <name>.yaml holds the values of a component that differ from the base on every cluster of the
+platform, and nothing but those, read after the base and before the environment's overlay: one environment (stg) runs on
+both platforms, and its overlay keeps the last word over the platform's. The overlay's rules hold here. */}}
+
+{{- /* <name>.values.tpl is for a component that needs what depends on the cluster it runs on (an AWS account, a
+session): a template rendered here with tpl on value cluster, which the bootstrap sets from the infrastructure
+repository's output and git never holds. What it renders goes last into helm.valuesObject. Each value goes in with quote
+or toJson, never as raw text, so a name or an address cannot change the YAML around it. */}}
+
+{{- /* argo-cd.yaml is the platform's values of Argo CD itself, which the bootstrap installs: no Application, so nothing
+here reads it. A platform file that names no component of that platform, is no YAML map or sets cluster, a template that
+renders no YAML map, an image or canary key in a service's, a cluster without a key of the contract below, all fail the
+render. */}}
 {{- $platform := toString (required "platform is not set: the name of a directory of platforms/ (the bootstrap sets k3d or eks)" .Values.platform) }}
 {{- $platforms := (.Files.Get "components.json" | fromJson).platforms | keys | sortAlpha }}
 {{- if not (has $platform $platforms) }}
@@ -194,13 +180,10 @@ YAML map, an image or canary key in a service's, a cluster without a key of the 
 {{- if not $seen }}
 {{- fail (printf "platforms/%s/ is missing or empty: every platform has a directory, with a README.md at least" $platform) }}
 {{- end }}
-{{- /*
-The contract of value cluster, the map output cluster_values of the infrastructure repository's Terraform gives, which
-the templates of a platform read (README.md of this repository says what each key is for). Checked before any
-template runs, so a missing key fails here with its name rather than as an empty string in a hostname or a CIDR. A key
-added to the contract is added here, to that output, to the templates and to the example the check of this repository
-renders with (deploy/ci/cluster-values.example.yaml of the code repository).
-*/}}
+{{- /* The contract of value cluster, the map output cluster_values of the infrastructure repository's Terraform gives.
+Checked before any template runs, so a missing key fails here with its name rather than as an empty string in a hostname
+or a CIDR. A key added to the contract is added here, to that output, to the templates and to the example the check of
+this repository renders with (deploy/ci/cluster-values.example.yaml of the code repository). */}}
 {{- $cluster := .Values.cluster | default dict }}
 {{- if not (kindIs "map" $cluster) }}
 {{- fail "cluster is no map: the bootstrap sets it from output cluster_values of the infrastructure repository" }}
@@ -300,12 +283,10 @@ spec:
     {{- end }}
       helm:
         releaseName: {{ .name }}
-        {{- /*
-        The environment's overlay, then its image file, then what the platform's template renders, merged as Helm
+        {{- /* The environment's overlay, then its image file, then what the platform's template renders, merged as Helm
         merges values files (a map key by key; any other value, a list too, replaced whole), on copies, since
         mustMergeOverwrite writes into its first argument. Argo CD reads valuesObject after every values file, so the
-        order stays base/ < archValues < platforms/<platform>/<name>.yaml < overlay < image < the template's render.
-        */}}
+        order is base/ < archValues < platforms/<platform>/<name>.yaml < overlay < image < the template's render. */}}
         {{- $object := dict }}
         {{- range $layer := list (get $overlays .name) (get $images .name) (get $platformObjects .name) }}
         {{- with $layer }}{{ $object = mustMergeOverwrite $object (deepCopy .) }}{{ end }}
@@ -339,19 +320,15 @@ spec:
       ref: values
     {{- end }}
   {{- if .canaryRoute }}
-  # Argo Rollouts writes into two objects of a release with a canary: its Gateway API plugin moves
-  # the weights of the two backendRefs of the release's HTTPRoute during a canary, then puts them back to 100/0, and the
-  # controller adds rollouts-pod-template-hash to the selectors of Services <release> and <release>-canary. Ignored
-  # here, selfHeal does not set the weights back in the middle of a canary. RespectIgnoreDifferences also keeps the live
-  # values when a sync applies these objects: Argo CD applies server-side with --force-conflicts, so without it every
-  # sync of this Application (a new release digest) would strip the hash from both selectors, sending each request to
-  # stable and canary pods alike until the controller sets it again, and reset the weights.
-  # The price, read in controller/sync.go of Argo CD v3.5.5 (normalizeTargetResources): the live values reach the
-  # applied manifest through a JSON merge patch, which replaces a list whole, so the whole spec.rules of the live route
-  # is applied, not only its weights. A change of the rules in git (a match, a filter, a timeout) is therefore not
-  # applied while the route exists: delete the route once no canary runs (kubectl --context k3d-svp -n {{ .namespace }}
-  # delete httproute {{ .canaryRoute }}) and selfHeal creates it again from git within seconds, the release unreachable
-  # meanwhile.
+  # Argo Rollouts writes into two objects of a release with a canary: its Gateway API plugin moves the weights of the
+  # two backendRefs of the release's HTTPRoute during a canary, then puts them back to 100/0, and the controller adds
+  # rollouts-pod-template-hash to the selectors of Services <release> and <release>-canary. Ignored here, selfHeal does
+  # not set the weights back in the middle of a canary.
+
+  # The price (normalizeTargetResources of Argo CD): the live values reach the applied manifest through a JSON merge
+  # patch, which replaces a list whole, so the whole spec.rules of the live route is applied, not only its weights. A
+  # change of the rules in git is therefore not applied while the route exists: delete the route once no canary runs and
+  # selfHeal creates it again from git within seconds, the release unreachable meanwhile.
   ignoreDifferences:
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
@@ -371,11 +348,9 @@ spec:
       selfHeal: true
     {{- if eq (int .wave) 0 }}
     # Pod Security "restricted" on the namespace of a component of wave 0 (cert-manager, envoy-gateway-system,
-    # external-secrets) from its chart's first pod on: Argo CD creates the namespace with these labels
-    # (CreateNamespace below) in phase PreSync, ahead of every object of the chart in it, hooks included, and sets them
-    # again at every sync. Chart svp-cluster
-    # labels the namespaces of every later wave, but comes after these charts, whose CRDs it needs. The same labels as
-    # svp-cluster's.
+    # external-secrets) from its chart's first pod on: Argo CD creates the namespace with these labels in phase PreSync
+    # and sets them again at every sync. Chart svp-cluster labels the namespaces of every later wave, but comes after
+    # these charts, whose CRDs it needs. The same labels as svp-cluster's.
     managedNamespaceMetadata:
       labels:
         pod-security.kubernetes.io/enforce: restricted
@@ -385,12 +360,10 @@ spec:
         pod-security.kubernetes.io/audit: restricted
         pod-security.kubernetes.io/audit-version: {{ $podSecurityVersion }}
         {{- if and (eq $platform "eks") (eq .name "envoy-gateway") }}
-        # The NLB of AWS Load Balancer Controller sends to the Envoy pods' addresses (target type ip). With this label
-        # the controller's pod webhook gives each new Envoy pod a readiness gate that holds until the NLB reports the
-        # pod's target healthy, so a rollout of Envoy keeps the old pod until the new one takes traffic; without it the
-        # old pod is deregistered while the new target is still in its first health checks, and the entry point refuses
-        # connections meanwhile. The webhook (failurePolicy Ignore) gates only the pods of a target group: Envoy
-        # Gateway's own controller here gets none, and a pod made while the controller is down gets none either.
+        # The NLB sends to the Envoy pods' addresses (target type ip). With this label the pod webhook of AWS Load
+        # Balancer Controller gives each new Envoy pod a readiness gate that holds until the NLB reports its target
+        # healthy; without it the old pod is deregistered while the new target is still in its first health checks, and
+        # the entry point refuses connections. The webhook (failurePolicy Ignore) gates only pods of a target group.
         elbv2.k8s.aws/pod-readiness-gate-inject: enabled
         {{- end }}
     {{- end }}
@@ -407,6 +380,10 @@ spec:
       - SkipDryRunOnMissingResource=true
       {{- end }}
       {{- if .canaryRoute }}
+      # RespectIgnoreDifferences keeps the live values when a sync applies these objects: Argo CD applies server-side
+      # with --force-conflicts, so without it every sync of this Application (a new release digest) would strip the hash
+      # from both selectors, sending each request to stable and canary pods alike until the controller sets it again,
+      # and reset the weights.
       - RespectIgnoreDifferences=true
       {{- end }}
     # An automated sync that failed is not tried again for the same revision unless retries are set. On a new
