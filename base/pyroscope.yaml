@@ -12,7 +12,7 @@ pyroscope:
   # under a key ending in "image".
   image:
     repository: grafana/pyroscope
-    tag: 2.4.2@sha256:ef9b48976386aa2781e84664dfdba7cc33a1b6793c0cc9d130812173a926ca1f
+    tag: 2.4.3@sha256:bf667534cd403320573063894e3faba20a5a5d1bfb92eddaecfabeb2446c502b
   # The single binary finds its own metastore through the API server (-metastore.address=kubernetes:///..., Role
   # pyroscope-discovery of the chart): allow-kube-api of chart svp-cluster opens that egress for pods with this label
   # only. The chart puts these labels on every object it renders, the pod included.
