@@ -1,16 +1,15 @@
 # Level 2 of the GitOps root. Level 1, chart argocd/root (Application svp-root, made by the bootstrap), makes the one
-# Application svp-apps of this chart and sets every value below but chartRepoURL's and project's defaults. Every values
-# file an Application reads comes from this repository, base/ and platforms/<platform>/ at targetRevision, through a
-# source with ref "values"; the overlay and the image file of envs/<env>/ come in its valuesObject, from envFiles. The
-# charts of the code repository come from chartRepoURL at the commit envs/<env>/charts.yaml pins, upstream charts from
-# the repositories components.json pins.
-# targetRevision is the revision this chart runs at: gitopsRevision of envs/<env>/charts.yaml when the environment pins
-# a commit of svp-gitops (prd), otherwise the revision svp-root follows (refs/heads/main on EKS). Always a full ref
-# (refs/heads/<branch>) or a commit: Argo CD resolves a short name with the first ref of that name, a tag included, so a
-# tag named main could be deployed.
+# Application svp-apps of this chart and sets every value below but chartRepoURL's and project's defaults. The values
+# files of an Application come from this repository (base/, platforms/<platform>/) through a source with ref "values".
+# Design notes: docs/components.md.
+
 # Both repositories are public and Argo CD reads them over HTTPS without credentials: no repository Secret, no key
 # anywhere. Both URLs are in sourceRepos of AppProject svp (argocd/project.yaml).
 repoURL: https://github.com/anhnvcoder/svp-gitops.git
+# The revision this chart runs at: gitopsRevision of envs/<env>/charts.yaml when the environment pins a commit of
+# svp-gitops (prd), otherwise the revision svp-root follows (refs/heads/main on EKS). Always a full ref
+# (refs/heads/<branch>) or a commit: Argo CD resolves a short name with the first ref of that name, a tag included, so a
+# tag named main could be deployed.
 targetRevision: refs/heads/main
 # The code repository, which holds the charts deploy/helm/* (path of a component in components.json).
 chartRepoURL: https://github.com/anhnvcoder/svp-backend.git
@@ -21,10 +20,9 @@ project: svp
 # per architecture). The bootstrap sets it on svp-root from the nodes it created; arm64, the nodes of a Mac, otherwise.
 nodeArch: arm64
 # The environment this cluster runs, the name of a directory of envs/: its charts.yaml pins the charts of the code
-# repository, its images/ holds the image of every release of chart svp-service, and an Application whose component
-# has a file <name>.yaml there reads it after its other values files. Required, no default: a cluster that forgot it
-# would otherwise run another environment's settings without a word. The dev path does not use this chart and reads
-# base/ alone.
+# repository, its images/ holds the image of every release of chart svp-service, and an Application whose component has
+# a file <name>.yaml there reads it after its other values files. Required, no default: a cluster that forgot it would
+# otherwise run another environment's settings without a word.
 env: ""
 # What level 1 read in envs/<env>/ at the revision svp-root follows (templates/applications.yaml says what each holds):
 # charts, the three values of charts.yaml but gitopsRevision; overlays and images, each envs/<env>/<name>.yaml and
@@ -33,10 +31,8 @@ env: ""
 envFiles: {}
 # The platform this cluster runs on, the name of a directory of platforms/ (files/platforms is a symlink to it): k3d, a
 # lab cluster, or eks, Amazon EKS. A component of components.json with a platforms field gets an Application only on the
-# platforms it lists; an Application reads platforms/<platform>/<name>.yaml after its base/ values and before the
-# environment's, and the values its platform's template platforms/<platform>/<name>.values.tpl renders from cluster
-# below after all of them (templates/applications.yaml). Required, no default, as env: a cluster that forgot it would
-# get the components and values of no platform at all. The bootstrap sets it: k3d on a lab cluster, eks on EKS.
+# platforms it lists. Required, no default, as env: a cluster that forgot it would get the components and values of no
+# platform at all. The bootstrap sets it: k3d on a lab cluster, eks on EKS.
 platform: ""
 # What depends on the AWS account or on one session (a VPC, a bucket, a name of the hosted zone), the map the
 # infrastructure repository's Terraform outputs as cluster_values, set by the bootstrap of an EKS cluster and never

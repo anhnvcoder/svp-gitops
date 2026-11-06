@@ -1,8 +1,7 @@
 # Production: three Redpanda brokers, one per availability zone (redpanda.yaml beside this file). The init Job reaches
 # the Admin API of every broker (replicas, the same number as statefulset.replicas there), so it still sets the users
 # with one broker down, and creates every topic with three replicas: acks=all, the producers' default, then waits for a
-# majority of two of them (Raft), as replication factor 3 with min.insync.replicas 2 does on Kafka. Postgres and the
-# object store are the cluster's (platforms/eks/).
+# majority of two of them (Raft), as replication factor 3 with min.insync.replicas 2 does on Kafka.
 redpanda:
   replicas: 3
   topicReplicas: 3

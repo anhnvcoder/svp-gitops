@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016 # $names in single quotes are jq variables and the inner shell's
-# application-health-test.sh: the test of the health check of argoproj.io/Application in base/argo-cd.yaml
-# (configs.cm resource.customizations.health.argoproj.io_Application), which the root's two levels wait on and whose
-# Healthy root makes Argo CD Notifications write argocd/<env> success. Each case is one Application with a status as
-# the controller writes it; Argo CD's own Lua engine assesses it: argocd admin settings resource-overrides health of the
-# Argo CD image base/argo-cd.yaml pins (global.image), without network and without a cluster (the ConfigMap is a file).
-# Needs docker (the image is pulled when missing) and jq. Exit 0 when every case gets its expected status.
+# application-health-test.sh: the test of the health check of argoproj.io/Application in base/argo-cd.yaml, which the
+# root's two levels wait on and whose Healthy root makes Argo CD Notifications write argocd/<env> success. Each case is
+# one Application with a status as the controller writes it; Argo CD's own Lua engine assesses it, without network and
+# without a cluster. Needs docker (image pulled when missing) and jq. Exit 0 when every case gets its expected status.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd -P)

@@ -10,6 +10,7 @@ Cấu hình triển khai của nền tảng video ngắn: values Helm, bản ph�
 - [Cấu trúc](#cấu-trúc)
 - [Root hai tầng và bootstrap](#root-hai-tầng-và-bootstrap)
 - [Lớp nền tảng](#lớp-nền-tảng)
+- [Thành phần](docs/components.md)
 - [Ai duyệt gì](#ai-duyệt-gì)
 - [Promote](#promote)
 - [Check](#check)
@@ -77,9 +78,12 @@ argocd/
 .github/workflows/pr-title.yml  tiêu đề PR theo Conventional Commits (mục Tiêu đề PR)
 .github/workflows/scorecard.yml OpenSSF Scorecard của repo (mục Check)
 CODEOWNERS, renovate.json
+docs/components.md          cấu hình đáng chú ý của từng thành phần và lý do
 Makefile                    docs-check (markdownlint-cli2 và lychee); cấu hình ở .markdownlint.yaml, lychee.toml
 LICENSE                     Apache-2.0
 ```
+
+Cấu hình đáng chú ý của từng thành phần (Argo CD, root, AppProject, chart upstream) và lý do: [`docs/components.md`](docs/components.md).
 
 Thứ tự ghép values của một Application: `values.yaml` của chart → `base/` → `platforms/<platform>/<name>.yaml` → `envs/<env>/<name>.yaml`
 → `envs/<env>/images/<name>.yaml` → phần mẫu `platforms/<platform>/<name>.values.tpl` sinh ra. `base/`, `platforms/` là file values, đọc qua

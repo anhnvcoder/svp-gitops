@@ -55,14 +55,10 @@ envoy:
   networkPolicy:
     enabled: true
 
-# The Secrets come from AWS Secrets Manager through External Secrets Operator, on every environment of this platform:
-# entry svp/<env>/<entry>, a JSON object of the same keys as on a lab cluster, written by `make eks-secrets` of the code
-# repository. Each namespace's store assumes a role of its own, allowed GetSecretValue on the entries that namespace
-# reads (templates/external-secrets.yaml of chart svp-cluster lists them), with the controller's EKS Pod Identity; the
-# chart then lets the controller out to public addresses on 443 (Secrets Manager, STS) and to the Pod Identity agent.
-# The prefix, the region and the roles depend on the environment and the account: svp-cluster.values.tpl beside this
-# file. Argo CD Notifications run on this platform (argo-cd.yaml beside this file): their Secret
-# argocd/argocd-notifications-secret comes through External Secrets like every other, from entry argocd-notifications.
+# The Secrets come from AWS Secrets Manager through External Secrets Operator, entry svp/<env>/<entry>, written by `make
+# eks-secrets`. Each namespace's store assumes a role of its own, allowed GetSecretValue on the entries that namespace
+# reads, with the controller's EKS Pod Identity; the chart then lets the controller out to public addresses on 443 and
+# to the Pod Identity agent. Prefix, region and roles come from svp-cluster.values.tpl beside this file.
 externalSecrets:
   enabled: true
   store: aws

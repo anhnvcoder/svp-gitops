@@ -1,20 +1,17 @@
 # Reloader v1.4.23 (chart oci://ghcr.io/stakater/charts reloader 2.2.19), release reloader in namespace reloader, wave 2
 # of argocd/apps/components.json: after chart svp-cluster (wave 1), which makes namespace reloader with Pod Security
-# "restricted" and its NetworkPolicies (default-deny, allow-dns, allow-kube-api), and before every chart whose workloads
-# opt in: KEDA, kube-prometheus-stack and Redpanda (wave 3), svp-data (wave 4), svp-observability (wave 5), the releases
-# of svp-service (wave 7).
-#
+# "restricted" and its NetworkPolicies, and before every chart whose workloads opt in.
+# Design notes: docs/components.md.
+
 # It restarts a workload when a Secret the workload names changes: the credentials deploy/k8s/secrets.sh and
-# deploy/k8s/aws-secrets.sh of the code repository rotate (lab: from .env; EKS: from AWS Secrets Manager through
-# External Secrets), and svp/sentry when glitchtip-init.sh changes it (not when it creates it: see reloadOnCreate). A
-# workload opts in by the names of its Secrets in annotation secret.reloader.stakater.com/reload, never by
-# reloader.stakater.com/auto; nothing else is touched.
-#
-# What a taken-over controller (its ServiceAccount token) holds, all from the chart's Roles in the namespaces below and
-# in reloader, no ClusterRole: get, list and watch every Secret there, which it needs to see a change and to hash the
-# data; get, list, update and patch Deployments, DaemonSets, StatefulSets and Argo Rollouts there; get and list
-# CronJobs, create and delete Jobs there (the chart's namespaced Role always grants them, for restarting a Job or a
-# CronJob); create and update ConfigMaps in reloader (its own record). Nothing outside these five namespaces.
+# deploy/k8s/aws-secrets.sh rotate, and svp/sentry when glitchtip-init.sh changes it (not when it creates it: see
+# reloadOnCreate). A workload opts in by the names of its Secrets in annotation secret.reloader.stakater.com/reload,
+# never by reloader.stakater.com/auto; nothing else is touched.
+
+# What a taken-over controller holds, from the chart's Roles in the namespaces below and in reloader, no ClusterRole:
+# every Secret there (get, list, watch); Deployments, DaemonSets, StatefulSets and Argo Rollouts there (get, list,
+# update, patch); CronJobs (get, list) and Jobs (create, delete); ConfigMaps in reloader (create, update). Nothing
+# outside these five namespaces.
 
 # Short, fixed names (Deployment reloader, Roles reloader-role) instead of the release name twice.
 fullnameOverride: reloader
@@ -37,22 +34,19 @@ reloader:
   # field git never set alone, so the restarted workload stays Synced and selfHeal does not undo the restart.
   reloadStrategy: annotations
   # Only a change to an existing Secret restarts anything, so a restart of Reloader restarts nothing. v1.4.23 cannot
-  # do both that and restart on a created Secret: it runs one Secret watcher per namespace above, and the first to
-  # finish its initial list sets a flag all of them share, after which every Secret still in a slower watcher's
-  # initial list counts as created and restarts the workloads that name it (internal/pkg/controller/controller.go,
-  # secretControllerInitialized). The cost: a Secret created after its workload started restarts nobody. Today that
-  # is only svp/sentry, which glitchtip-init.sh writes once the services run and which they read as optional: a
-  # service started before it reports no errors until it restarts, by the operator's hand (kubectl rollout restart),
-  # at its next rollout, or when the Secret changes again.
-  # Revisit when Reloader v2 is a stable release: it takes a create only for a Secret made after the controller
-  # started (creationTimestamp), so reloadOnCreate can be true again.
+  # do both that and restart on a created Secret: once the first Secret watcher finishes its initial list, every Secret
+  # still in a slower watcher's initial list counts as created and restarts the workloads that name it.
+
+  # The cost: a Secret created after its workload started restarts nobody. Today that is only svp/sentry, which
+  # glitchtip-init.sh writes once the services run: a service started before it reports no errors until it restarts
+  # (kubectl rollout restart), at its next rollout, or when the Secret changes again.
+  # Revisit when Reloader v2 is a stable release: reloadOnCreate can be true again.
   reloadOnCreate: false
   syncAfterRestart: false
   # The releases gateway and web are Rollouts; each also sets reloader.stakater.com/rollout-strategy: restart, so a
-  # restart sets spec.restartAt and makes no new revision (no canary for a credential). The chart grants the rule on
-  # rollouts only when the cluster serves argoproj.io/v1alpha1, whose CRD Argo Rollouts brings in the same wave: on a
-  # new cluster Argo CD may render this chart before that CRD exists, and adds the rule at its next refresh of the
-  # Application (timeout.reconciliation 60s, base/argo-cd.yaml), before the Rollouts themselves exist (wave 7).
+  # restart sets spec.restartAt and makes no new revision. The chart grants the rule on rollouts only when the cluster
+  # serves argoproj.io/v1alpha1: on a new cluster Argo CD may render this chart before the Argo Rollouts CRD exists, and
+  # adds the rule at its next refresh (timeout.reconciliation 60s, base/argo-cd.yaml), before the Rollouts exist.
   isArgoRollouts: true
   # Pod Security "restricted": the chart's pod already runs as 65534, non-root, with seccomp RuntimeDefault; this
   # adds a read-only root (with an emptyDir at /tmp) and the container settings below.

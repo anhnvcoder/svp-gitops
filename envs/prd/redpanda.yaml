@@ -1,8 +1,7 @@
-# Production: three brokers, one per availability zone, so losing a zone or a node keeps a majority of every
-# partition (two of three replicas, Raft). The rest is the base's: SASL SCRAM-SHA-256, the Admin API authenticated,
-# the topics and users of the init Job of chart svp-data (envs/prd/svp-data.yaml gives it the three brokers), the
-# PodDisruptionBudget maxUnavailable 1, which a drain now has to respect. Brokers reach each other on RPC (33145) and
-# the Admin API (9644) through NetworkPolicy redpanda-peers of chart svp-cluster.
+# Production: three brokers, one per availability zone, so losing a zone or a node keeps a majority of every partition
+# (two of three replicas, Raft). The rest is the base's (SASL, the topics and users of the init Job of chart svp-data,
+# given the three brokers by envs/prd/svp-data.yaml), and so is PodDisruptionBudget maxUnavailable 1, which a drain now
+# has to respect. Brokers reach each other on RPC (33145) and the Admin API (9644) through NetworkPolicy redpanda-peers.
 statefulset:
   replicas: 3
   podTemplate:
@@ -38,16 +37,13 @@ statefulset:
             capabilities:
               drop: [ALL]
           # The chart's hooks call the Admin API with an unauthenticated curl, which admin_api_require_auth refuses, so
-          # these replace them with the same steps as svp-admin (RPK_USER, RPK_PASS of this container, from Secret
-          # redpanda-bootstrap): before the broker stops it enters maintenance mode and hands its partition leadership
-          # to the others (rpk cluster maintenance enable --wait), so a rolling restart or a drain never leaves a
-          # partition without its leader; once it starts again it leaves maintenance mode. The broker's id comes from
-          # its own Admin API (/v1/node_config, the endpoint the chart's hooks read), the credentials in a header on
-          # curl's stdin, never on a command line. Each hook is bounded by 45 s, half of terminationGracePeriodSeconds as the chart's,
-          # and always succeeds: a hook that fails would kill the container. The cluster has one maintenance slot, so
-          # the preStop of a second broker draining at the same time does not drain; the PodDisruptionBudget keeps a
-          # drain to one broker at a time.
+          # these replace them with the same steps as svp-admin: before the broker stops it enters maintenance mode and
+          # hands its partition leadership to the others, so a drain never leaves a partition without its leader; once
+          # it starts again it leaves maintenance mode.
           lifecycle:
+            # Each hook is bounded by 45 s, half of terminationGracePeriodSeconds as the chart's, and always succeeds: a
+            # hook that fails would kill the container. The credentials (RPK_USER, RPK_PASS) go in a header on curl's
+            # stdin, never on a command line.
             postStart:
               exec:
                 command:
@@ -66,6 +62,8 @@ statefulset:
                     done
                     timeout 10 rpk cluster maintenance disable "$id" >/proc/1/fd/1 2>&1
                     true
+            # The cluster has one maintenance slot, so the preStop of a second broker draining at the same time does not
+            # drain; the PodDisruptionBudget keeps a drain to one broker at a time.
             preStop:
               exec:
                 command:
@@ -93,8 +91,8 @@ rackAwareness:
   enabled: true
 
 # Half a core per broker (the chart then runs --smp=1 overprovisioned), memory as the base's: three brokers of one core
-# would not fit three m7g.large beside the rest of prd (the code repository's decision record on Kafka in prd,
-# appendix, section Capacity: about 5.35 of 5.79 allocatable vCPU with half a core, 6.85 with one).
+# would not fit three m7g.large beside the rest of prd (about 5.35 of 5.79 allocatable vCPU with half a core, 6.85 with
+# one).
 resources:
   cpu:
     cores: 500m

@@ -1,15 +1,13 @@
 # Root Application svp-root reads this chart from svp-gitops and sets its values. On EKS the GitOps Bridge makes it
-# (ApplicationSet svp-bootstrap of root aws/gitops/<env> of the infrastructure repository, from the labels and the
-# annotation of the cluster's Secret in namespace argocd); on k3d deploy/k8s/gitops.sh of the code repository creates
-# it with the same spec.
-#
+# (ApplicationSet svp-bootstrap of the infrastructure repository); on k3d deploy/k8s/gitops.sh of the code repository
+# creates it with the same spec.
+
 # This repository, read over HTTPS without credentials (sourceRepos of AppProject svp, argocd/project.yaml).
 repoURL: https://github.com/anhnvcoder/svp-gitops.git
-# The revision svp-root follows, the same as its own source's targetRevision: envs/<env>/ is always read at it (the
-# overlays, images/ and charts.yaml, files a pull request of the promote changes), and so is chart argocd/apps when the
-# environment pins no commit of svp-gitops. refs/heads/main on EKS; deploy/k8s/gitops.sh sets the commit it checked,
-# then the branch. Always a full ref (refs/heads/<branch>) or a commit: Argo CD resolves a short name with the first ref
-# of that name, a tag included, so a tag named main could be deployed.
+# The revision svp-root follows, the same as its own source's targetRevision: envs/<env>/ is always read at it, and so
+# is chart argocd/apps when the environment pins no commit of svp-gitops. refs/heads/main on EKS; deploy/k8s/gitops.sh
+# sets the commit it checked, then the branch. Always a full ref (refs/heads/<branch>) or a commit: Argo CD resolves a
+# short name with the first ref of that name, a tag included, so a tag named main could be deployed.
 targetRevision: refs/heads/main
 # The code repository, which holds the charts deploy/helm/* (path of a component in argocd/apps/components.json).
 chartRepoURL: https://github.com/anhnvcoder/svp-backend.git

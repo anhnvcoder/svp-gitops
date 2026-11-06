@@ -1,22 +1,22 @@
 # Kyverno v1.19.1 (chart https://kyverno.github.io/kyverno/ kyverno 3.9.1), release kyverno in namespace kyverno, wave 2
-# of argocd/apps/components.json: the admission controller,
-# which verifies the signature and the vuln attestation of every image a pod of namespace svp runs, the reports
-# controller (PolicyReports of the dev path's Audit mode), and the CRDs. The policy itself, ImageValidatingPolicy
-# svp-images, is chart deploy/helm/svp-policy (wave 3), before any pod of svp (wave 7).
-#
-# Every pod of the chart meets Pod Security "restricted" (non-root uid 65534, read-only root, drop ALL, seccomp
-# RuntimeDefault, no host namespace, only emptyDir and projected token volumes), which namespace kyverno enforces: chart
-# svp-cluster (wave 1) makes it with that label and its NetworkPolicies (default-deny; DNS; the API server; webhook
-# calls from the API server; TCP 443 to public addresses only, for GHCR and Sigstore's TUF). Requests and limits stay
-# the chart's: admission controller 100m/128Mi, limit 384Mi; reports controller 100m/64Mi, limit 128Mi.
-#
+# of argocd/apps/components.json: the admission controller, which verifies the signature and the vuln attestation of
+# every image a pod of namespace svp runs, the reports controller, and the CRDs. The policy itself is chart
+# deploy/helm/svp-policy (wave 3).
+
+# Design notes: docs/components.md.
+
+# Every pod of the chart meets Pod Security "restricted", which namespace kyverno enforces: chart svp-cluster (wave 1)
+# makes it with that label and its NetworkPolicies (default-deny; DNS; the API server; webhook calls from the API
+# server; TCP 443 to public addresses only, for GHCR and Sigstore's TUF). Requests and limits stay the chart's:
+# admission controller 100m/128Mi, limit 384Mi; reports controller 100m/64Mi, limit 128Mi.
+
 # Kyverno down and the policy in Enforce (GitOps path): the policy's webhook fails closed, so no new pod of svp starts
-# (a KEDA scale-out, a restart, a rollout), while pods already running keep running: the API server admits a pod once,
-# when it is created, so `k3d cluster start` brings back the pods it had without asking Kyverno. Every other namespace
-# never reaches that webhook. A Kyverno stopped on purpose is not down in that sense: when its admission controller
-# stops while its Deployment asks for 0 replicas (scaled to 0) or is being deleted, it deletes all its webhook
-# configurations (IsGoingDown, pkg/utils/runtime/utils.go of v1.19.1), and every pod is admitted unchecked until it
-# starts again; so whoever may scale or delete Deployments in namespace kyverno can turn the policy off.
+# (a KEDA scale-out, a restart, a rollout), while pods already running keep running. Every other namespace never
+# reaches that webhook.
+
+# A Kyverno stopped on purpose is not down in that sense: when its admission controller stops while its Deployment asks
+# for 0 replicas or is being deleted, it deletes all its webhook configurations and every pod is admitted unchecked, so
+# whoever may scale or delete Deployments in namespace kyverno can turn the policy off.
 
 # Every pod of the chart calls the API server: allow-kube-api of chart svp-cluster opens that egress for pods with this
 # label only, in a namespace that denies everything else.
@@ -31,11 +31,12 @@ admissionController:
   # One replica: the lab's machine has 16 GB; a second one would
   # only matter for an upgrade or a node drain without a gap in admission.
   replicas: 1
-  # Each image of the chart by digest (multi-arch index: linux/amd64 and linux/arm64), the version beside it for the
-  # reader: a tag can be pushed again to other content, a digest cannot. The chart renders
-  # registry/repository:tag, so tag holds version@digest; deploy/k8s/check-image-digests.sh fails on an image without
-  # one. Registry ghcr.io instead of the chart's reg.kyverno.io, which is the same GHCR repository under another name
-  # (the same digests): one registry fewer the nodes depend on, and the one Renovate's docker datasource reads.
+  # Each image of the chart by digest, the version beside it for the reader: a tag can be pushed again to other
+  # content, a digest cannot. The chart renders registry/repository:tag, so tag holds version@digest;
+  # pin_check of deploy/ci/gitops-check.sh fails on an image without one.
+
+  # Registry ghcr.io instead of the chart's reg.kyverno.io, the same GHCR repository under another name (the same
+  # digests): one registry fewer the nodes depend on, and the one Renovate's docker datasource reads.
   initContainer:
     image:
       registry: ghcr.io
@@ -47,15 +48,13 @@ admissionController:
       repository: kyverno/kyverno
       tag: v1.19.1@sha256:b31d8511ae5fd6010e2a01ea72ebae08eb82fa51d91af14a1d9fe989949b4edb
     extraArgs:
-      # The cache of verification results (on by default, 60 minutes per result) is a ristretto cache whose budget is
-      # this flag: a signature result costs 1, an attestation result 1 + the bytes of the payload it keeps
-      # (pkg/image/verification/cache/client.go of v1.19.1). At the default of 1000 no vuln payload (two trivy
-      # reports, kilobytes) would be kept, and every new pod would reach TUF and GHCR again. The same flag also sizes
-      # ristretto's frequency sketch and bloom filter (NumCounters = 10 x budget, rounded up to powers of two), which
-      # Go counts as heap from the start: about 48 MiB for 1 MiB, but 3 GiB for 64 MiB, far past the GOMEMLIMIT
-      # Kyverno derives from the 384Mi limit, so the GC would run without pause. 1 MiB keeps the payloads of the seven
-      # services and the two drill images several times over. A result is then trusted for up to 60 minutes, so an
-      # attestation older than 72 hours by less than that, or Sigstore failing after it was cached, still admits a pod.
+      # Budget of the cache of verification results (60 minutes per result): at the default of 1000 no vuln payload
+      # (two trivy reports, kilobytes) is kept and every new pod reaches TUF and GHCR again. It also sizes ristretto's
+      # counters, counted as heap from the start: about 48 MiB for 1 MiB, 3 GiB for 64 MiB, far past the GOMEMLIMIT
+      # Kyverno derives from the 384Mi limit. 1 MiB keeps the payloads of the seven services and the two drill images.
+
+      # A result is trusted for up to 60 minutes, so an attestation older than 72 hours by less than that, or Sigstore
+      # failing after it was cached, still admits a pod.
       imageVerifyCacheMaxSize: "1048576"
 
 reportsController:
