@@ -20,6 +20,13 @@ statefulset:
       repository: docker.io/redpandadata/redpanda-operator
       tag: v26.2.4@sha256:247d43566fffd766618f08f318c7adb78310305900db968b879dfd58cdc32722
   podTemplate:
+    # The broker reads its bootstrap user (Secret redpanda-bootstrap) and the sidecar the superusers (Secret
+    # redpanda-superusers) from files and the environment of the pod: Reloader (base/reloader.yaml) restarts the
+    # StatefulSet when deploy/k8s/secrets.sh or External Secrets changes either. On the pod template, which Reloader
+    # reads when the StatefulSet has no such annotation: commonAnnotations, the chart's only way to annotate the
+    # StatefulSet, would go on every object of the chart.
+    annotations:
+      secret.reloader.stakater.com/reload: redpanda-bootstrap,redpanda-superusers
     labels:
       # The sidecar holds a lease and reads its Secrets through the API server: allow-kube-api of chart svp-cluster
       # opens that egress only for pods with this label.

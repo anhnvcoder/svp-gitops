@@ -73,9 +73,18 @@
       ]
     },
     {
+      "name": "reloader",
+      "namespace": "reloader",
+      "wave": 2,
+      "repo": "oci://ghcr.io/stakater/charts",
+      "chart": "reloader",
+      "version": "2.2.19",
+      "values": "base/reloader.yaml"
+    },
+    {
       "name": "keda",
       "namespace": "keda",
-      "wave": 2,
+      "wave": 3,
       "repo": "https://kedacore.github.io/charts",
       "chart": "keda",
       "version": "2.21.0",
@@ -117,7 +126,7 @@
     {
       "name": "kube-prometheus-stack",
       "namespace": "svp-obs",
-      "wave": 2,
+      "wave": 3,
       "repo": "https://prometheus-community.github.io/helm-charts",
       "chart": "kube-prometheus-stack",
       "version": "92.10.1",

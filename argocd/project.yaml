@@ -14,12 +14,14 @@ spec:
   # This repository (the root chart and every values file) and the code repository (its charts, deploy/helm/*, read
   # only at the commit envs/<env>/charts.yaml pins), both over HTTPS without credentials as repoURL and chartRepoURL of
   # argocd/apps/values.yaml name them, and the chart repositories of components.json, nothing else.
-  # docker.io/envoyproxy is Envoy Gateway's OCI repository, written without the scheme as Argo CD takes it.
+  # docker.io/envoyproxy is Envoy Gateway's OCI repository and ghcr.io/stakater/charts Reloader's, written without the
+  # scheme as Argo CD takes them.
   sourceRepos:
     - https://github.com/anhnvcoder/svp-gitops.git
     - https://github.com/anhnvcoder/svp-backend.git
     - https://charts.jetstack.io
     - docker.io/envoyproxy
+    - ghcr.io/stakater/charts
     - https://cloudnative-pg.github.io/charts
     - https://charts.redpanda.com
     - https://kedacore.github.io/charts
@@ -40,7 +42,8 @@ spec:
   # kube-system also holds AWS Load Balancer Controller, the namespace its EKS Pod Identity association names.
   # external-secrets holds External Secrets Operator; svp-secrets the source Secrets its stores read on a lab cluster
   # (no chart writes one there: chart svp-cluster makes the namespace, its Roles and NetworkPolicy). external-dns holds
-  # ExternalDNS (platform eks).
+  # ExternalDNS (platform eks). reloader holds Reloader, whose Roles and RoleBindings go into svp, svp-data, svp-obs and
+  # keda, already listed.
   destinations:
     - {server: https://kubernetes.default.svc, namespace: svp}
     - {server: https://kubernetes.default.svc, namespace: svp-data}
@@ -57,10 +60,12 @@ spec:
     - {server: https://kubernetes.default.svc, namespace: external-secrets}
     - {server: https://kubernetes.default.svc, namespace: svp-secrets}
     - {server: https://kubernetes.default.svc, namespace: external-dns}
+    - {server: https://kubernetes.default.svc, namespace: reloader}
   # Cluster-scoped kinds the charts render (helm template of every component with its values, on each platform),
   # nothing else: no PersistentVolume, PriorityClass, IngressClass, node or admission policy of another kind. Namespaced
   # kinds are not listed: every one is allowed in the namespaces above. AWS Load Balancer Controller and ExternalDNS
-  # (platform eks) need none beyond the CRDs, RBAC and webhook configurations here.
+  # (platform eks) need none beyond the CRDs, RBAC and webhook configurations here; Reloader, which watches the
+  # project's namespaces only, renders none at all.
   clusterResourceWhitelist:
     - {group: "", kind: Namespace}
     - {group: apiextensions.k8s.io, kind: CustomResourceDefinition}

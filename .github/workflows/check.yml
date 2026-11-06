@@ -37,7 +37,7 @@ env:
   # The commit of the code repository whose deploy/ci/gitops-check.sh checks this tree: a commit on its main, changed
   # by a pull request here (Renovate proposes the newest).
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
-  CHECKER_COMMIT: 7a4b3b3ab4b6e3856ab5d826e797d231af09ed95
+  CHECKER_COMMIT: a6e4ec183e301e86c55dc1a99b00420ce1750ae0
 
 jobs:
   # Which areas a pull request changes, so a job whose area it leaves alone skips and gitops-ok accepts that skip.
