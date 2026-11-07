@@ -174,7 +174,7 @@
       "wave": 3,
       "repo": "https://grafana-community.github.io/helm-charts",
       "chart": "tempo",
-      "version": "3.2.0",
+      "version": "3.2.1",
       "values": "base/tempo.yaml"
     },
     {
