@@ -129,7 +129,7 @@
       "wave": 3,
       "repo": "https://prometheus-community.github.io/helm-charts",
       "chart": "kube-prometheus-stack",
-      "version": "92.10.1",
+      "version": "92.17.1",
       "values": "base/kube-prometheus-stack.yaml"
     },
     {
