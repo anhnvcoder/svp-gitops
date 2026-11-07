@@ -27,7 +27,7 @@ env:
   ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
   # Commit of the code repository whose deploy/ci/gitops-check.sh checks this tree; Renovate proposes the newest.
   # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
-  CHECKER_COMMIT: e3010ce1978c1d2bbdbc041ca1088eb7f591f2e0
+  CHECKER_COMMIT: bc37045440a3d0ec0737106cae76533b31989d7b
 
 jobs:
   # Which areas a pull request changes, so a job whose area it leaves alone skips and gitops-ok accepts that skip.
