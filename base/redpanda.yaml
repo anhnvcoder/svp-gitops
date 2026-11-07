@@ -9,7 +9,7 @@
 # entries under statefulset.podTemplate below, which replace the image of the chart's own containers.
 image:
   repository: docker.io/redpandadata/redpanda
-  tag: v26.2.4
+  tag: v26.2.6
 
 statefulset:
   replicas: 1
@@ -19,7 +19,7 @@ statefulset:
   sideCars:
     image:
       repository: docker.io/redpandadata/redpanda-operator
-      tag: v26.2.4@sha256:247d43566fffd766618f08f318c7adb78310305900db968b879dfd58cdc32722
+      tag: v26.2.5@sha256:854e11c97887307d579ef486e516fc1a6ef7431d6c41ad6414adaf5191e9c59c
   podTemplate:
     # The broker reads its bootstrap user (Secret redpanda-bootstrap) and the sidecar the superusers (Secret
     # redpanda-superusers) from files and the environment of the pod: Reloader
@@ -49,7 +49,7 @@ statefulset:
       topologySpreadConstraints: null
       containers:
         - name: redpanda
-          image: docker.io/redpandadata/redpanda:v26.2.4@sha256:c98c2f04a751e6646012cc701bac5183252cee44c88ba1dfa412e4c7124f2e89
+          image: docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
           securityContext:
             capabilities:
               drop: [ALL]
@@ -67,7 +67,7 @@ statefulset:
               drop: [ALL]
       initContainers:
         - name: redpanda-configurator
-          image: docker.io/redpandadata/redpanda:v26.2.4@sha256:c98c2f04a751e6646012cc701bac5183252cee44c88ba1dfa412e4c7124f2e89
+          image: docker.io/redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce
           securityContext:
             capabilities:
               drop: [ALL]
