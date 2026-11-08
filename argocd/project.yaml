@@ -20,7 +20,6 @@ spec:
     - docker.io/envoyproxy
     - ghcr.io/stakater/charts
     - https://cloudnative-pg.github.io/charts
-    - https://charts.redpanda.com
     - https://kedacore.github.io/charts
     - https://prometheus-community.github.io/helm-charts
     - https://grafana-community.github.io/helm-charts
@@ -78,7 +77,7 @@ spec:
     # Chart svp-cluster on platform eks: StorageClass gp3, the cluster's default class (EBS volumes). No other chart
     # renders one.
     - {group: storage.k8s.io, kind: StorageClass}
-    # Chart svp-data: KEDA's login to Redpanda, read from Secret keda/keda-kafka.
+    # Chart svp-data: KEDA's login to Kafka, read from Secret keda/keda-kafka.
     - {group: keda.sh, kind: ClusterTriggerAuthentication}
     # Chart svp-policy: the image policy of namespace svp. Kyverno's own chart needs no kind beyond the CRDs and RBAC
     # above; the webhook configurations it registers at run time are its own, not Argo CD's.

@@ -8,12 +8,17 @@ env:
   S3_REGION: {{ $c.region | quote }}
   S3_UPLOADS_BUCKET: {{ $c.uploadsBucket | quote }}
   S3_MEDIA_BUCKET: {{ $c.mediaBucket | quote }}
-# Egress by address instead of the in-cluster pods: RDS in the database subnets on 5432; S3's ranges of the region on
-# 443, and the EKS Pod Identity agent on the node, where the pod gets its role's credentials.
+  KAFKA_BROKERS: {{ $c.kafkaBrokers | quote }}
+# Egress by address instead of the in-cluster pods: RDS and MSK in the database subnets on 5432 and 9096; S3's ranges
+# of the region on 443, and the EKS Pod Identity agent on the node, where the pod gets its role's credentials.
 externalPeers:
   postgres:
   {{- range $c.dbCidrs }}
     - {cidr: {{ . | quote }}, ports: [5432]}
+  {{- end }}
+  kafka:
+  {{- range $c.dbCidrs }}
+    - {cidr: {{ . | quote }}, ports: [9096]}
   {{- end }}
   s3:
   {{- range $c.s3Cidrs }}

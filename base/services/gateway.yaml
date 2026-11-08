@@ -1,6 +1,7 @@
 # Release gateway of chart deploy/helm/svp-service: the
 # public HTTP API behind Envoy at https://api.svp.localhost:8443. Secret gateway-env holds JWT_VERIFY_KEYS, public
-# keys only: the gateway verifies tokens, it cannot sign them (threat model JWT-10).
+# keys only: the gateway verifies tokens, it cannot sign them (threat model JWT-10); and REDIS_URL, Valkey db 10, where
+# rate limits are counted so every gateway pod shares one count (Valkey down, it falls back to in-memory counters).
 protocol: http
 port: 8080
 resources:
@@ -14,9 +15,6 @@ env:
   ENGAGEMENT_SERVICE_ADDR: engagement-service:9103
   # Playlist and thumbnail URLs handed to clients: the object store's media bucket through Gateway svp.
   MEDIA_PUBLIC_BASE_URL: https://s3.svp.localhost:8443/media
-  # Rate limits are counted in Valkey db 10 so every gateway pod shares one count; Valkey down, the gateway falls back
-  # to in-memory counters.
-  REDIS_URL: redis://valkey.svp-data:6379/10
   # Envoy appends the address of the connection it got to X-Forwarded-For: one trusted hop, believed only when the
   # connection comes from the pod range, which the policy below narrows to Envoy's pods and the web client's, whose BFF
   # passes on the header Envoy set without adding a hop (threat model RL-1, WEB-8).

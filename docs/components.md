@@ -23,7 +23,6 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [KEDA](#keda)
 - [kube-prometheus-stack](#kube-prometheus-stack)
 - [Barman Cloud plugin](#barman-cloud-plugin)
-- [Redpanda](#redpanda)
 - [Loki](#loki)
 - [Tempo](#tempo)
 - [svp-data](#svp-data)
@@ -58,7 +57,7 @@ kê mọi Application. Nền tảng `eks` bật nó (`platforms/eks/argo-cd.yaml
 Bật cho mọi Application trừ hai tầng root. Controller so object đang chạy với kết quả của dry-run server-side apply của manifest, nên các
 giá trị mặc định mà API server điền (`group`, `kind` và `weight` của `backendRefs` trong Gateway API và `match` mặc định của route,
 `apiVersion` và `kind` của `volumeClaimTemplates` trong StatefulSet, `protocol` của port) có ở cả hai phía. Diff mặc định so chính
-manifest, vốn thiếu chúng: các Application `svp-cluster`, `redpanda`, `svp-data` và `gateway` ở yên OutOfSync trên cluster mới và `selfHeal`
+manifest, vốn thiếu chúng: các Application `svp-cluster`, `svp-data` và `gateway` ở yên OutOfSync trên cluster mới và `selfHeal`
 sync lại chúng mãi.
 
 - `ignoreDifferences` vẫn áp cho cả hai phía (`pkg/diff/diff.go`, `serverSideDiff` của gitops-engine); hook không bao giờ bị dry-run apply
@@ -514,8 +513,8 @@ bao giờ được dùng.
 
 Reloader (chart `reloader` của `oci://ghcr.io/stakater/charts`), release `reloader` ở namespace `reloader`, wave 2 của
 `argocd/apps/components.json`: sau chart `svp-cluster` (wave 1), cái tạo namespace `reloader` với Pod Security `restricted` và NetworkPolicy
-của nó (default-deny, `allow-dns`, `allow-kube-api`), và trước mọi chart có workload đăng ký dùng nó: KEDA, kube-prometheus-stack và
-Redpanda (wave 3), `svp-data` (wave 4), `svp-observability` (wave 5), các release của `svp-service` (wave 7).
+của nó (default-deny, `allow-dns`, `allow-kube-api`), và trước mọi chart có workload đăng ký dùng nó: KEDA và kube-prometheus-stack
+(wave 3), `svp-data` (wave 4), `svp-observability` (wave 5), các release của `svp-service` (wave 7).
 
 Nó restart một workload khi một Secret mà workload nêu tên đổi: các credential mà `deploy/k8s/secrets.sh` và `deploy/k8s/aws-secrets.sh` của
 repo code xoay (lab: từ `.env`; EKS: từ AWS Secrets Manager qua External Secrets), và `svp/sentry` khi `glitchtip-init.sh` đổi nó (không phải
@@ -679,7 +678,8 @@ Secret ngoài namespace `keda`: khoá ký JWT trong `svp/user-service-env`, mậ
 
 - **Hạn chế đọc Secret.** Mặc định operator liệt kê và watch mọi Secret của cluster. Hạn chế, nó chỉ đọc Secret của namespace `keda` của
   nó (Role `keda-operator-certs` ở dưới; biến `KEDA_RESTRICT_SECRET_ACCESS`): Secret `keda/keda-kafka`, do `deploy/k8s/secrets.sh` tạo,
-  mà ClusterTriggerAuthentication `keda-kafka` trỏ tới. Một TriggerAuthentication ở namespace khác khi đó không dùng được Secret của
+  mà ClusterTriggerAuthentication `keda-kafka` trỏ tới, và trên k3d `keda/local-ca`, CA mà cert của broker nối về (tham số `ca`; trên EKS
+  cert của MSK nối về CA công khai trong root hệ thống). Một TriggerAuthentication ở namespace khác khi đó không dùng được Secret của
   namespace của nó nữa.
 - **Certificate do cert-manager.** cert-manager (wave 0) cấp certificate TLS của operator, metrics server và webhook từ một CA riêng ở
   namespace `keda`, và cainjector của nó ghi CA đó vào APIService `v1beta1.external.metrics.k8s.io` và ValidatingWebhookConfiguration
@@ -692,7 +692,7 @@ Secret ngoài namespace `keda`: khoá ký JWT trong `svp/user-service-env`, mậ
   resource của cluster. Nên chart không render RBAC (value này tắt cả của metrics server và webhook), và `extraObjects` ở dưới giữ mọi
   Role, ClusterRole và binding mà chart render với các value ở trên, cùng tên, không đổi trừ ClusterRole `keda-operator`. Không gì ở đây
   dùng ScaledJob.
-- **Reloader restart operator.** Operator đọc Secret `keda-kafka` (đăng nhập của ClusterTriggerAuthentication `keda-kafka` tới Redpanda)
+- **Reloader restart operator.** Operator đọc Secret `keda-kafka` (đăng nhập của ClusterTriggerAuthentication `keda-kafka` tới Kafka)
   chỉ lúc khởi động: Reloader (`base/reloader.yaml`) restart nó khi `deploy/k8s/secrets.sh` hay External Secrets đổi Secret đó. Annotation
   đặt trên pod template của operator, nơi Reloader đọc khi Deployment không có annotation như vậy: `additionalAnnotations` sẽ đặt lên mọi
   object, cả metrics server và webhook, những cái không đọc nó.
@@ -794,52 +794,6 @@ operator CloudNativePG, sẽ để informer của nó lỗi vì quyền. Ai lấ
 chấp nhận cho lab một người ([mô hình mối đe doạ](https://github.com/anhnvcoder/svp-backend/blob/main/docs/threat-model.md), BAK-1, mục 6); cloud dùng backup RDS, không
 plugin. `make drill-k8s-threats` in ngoại lệ này cùng lý do của nó.
 
-## Redpanda
-
-Redpanda (chart `redpanda` của `charts.redpanda.com`), release `redpanda` ở namespace `svp-data`, wave 3 của `argocd/apps/components.json`
-([mô hình mối đe doạ](https://github.com/anhnvcoder/svp-backend/blob/main/docs/threat-model.md), IN-4). Một broker, SASL SCRAM-SHA-256 trên
-listener Kafka, Admin API có xác thực, không TLS (mã hoá traffic trong cluster là IN-3 của mô hình mối đe doạ). Topic, user ứng dụng và ACL
-của chúng đến từ init Job của chart `svp-data` (wave 4), cái cũng mang NetworkPolicy của `svp-data`.
-
-### Job cấu hình của chart bị tắt
-
-Job riêng của chart (`redpanda-configuration`, `redpanda-operator sync-cluster-config` sau mỗi lần install và upgrade) sẽ apply
-`config.cluster` bên dưới và các superuser lên cluster đang chạy; nó nói chuyện với broker, mà NetworkPolicy của `svp-data` (wave 4, sau
-release này) chưa cho. Không có nó, `config.cluster` chỉ có hiệu lực khi cluster hình thành (từ `.bootstrap.yaml`): đổi nó sau đó trên
-cluster đang chạy cần `rpk cluster config set` với tư cách `svp-admin`, hay một cluster mới (`make k8s-down && make k8s-up`). Init Job
-của chart `svp-data` chỉ đặt lại `enable_consumer_group_metrics` (`create-topics.sh`); sidecar giữ các superuser.
-
-### Bộ nhớ
-
-Cùng footprint với compose (`--smp 1 --memory 1G`): `--smp=1`, `--memory=1024M`, và request cùng limit 1280Mi cho pod. `--reserve-memory`
-được đặt ở đây thay vì để chart suy ra (0,2% của limit + 200 MiB, tức 202M): Seastar từ chối khởi động trừ khi limit của cgroup, trừ
-`vm.min_free_kbytes` của kernel host (mà container thấy nguyên vẹn), trừ `--reserve-memory`, vẫn chứa được `--memory`.
-
-- 202M chỉ để lại 54 MiB cho `min_free_kbytes`, vốn là 44 MiB trong VM arm64 của Docker Desktop nhưng 66 MiB trên host Linux x86_64 có
-  transparent huge pages (67584 kB trên runner ubuntu-24.04 của GitHub), nơi broker dừng với "insufficient physical memory: needed
-  1073741824 available 1061158912".
-- 128M để lại 128 MiB cho nó.
-- Không gì khác đọc `--reserve-memory` (Redpanda chỉ log nó): broker vẫn lấy 1024M, và limit vẫn để nó 256 MiB ngoài Seastar.
-
-### Production
-
-`envs/prd/redpanda.yaml`: ba broker, mỗi availability zone một, để mất một zone hay một node vẫn giữ đa số của mọi partition (hai trong ba
-replica, Raft). Phần còn lại là của base: SASL SCRAM-SHA-256, Admin API có xác thực, topic và user của init Job của chart `svp-data`
-(`envs/prd/svp-data.yaml` cho nó ba broker), PodDisruptionBudget `maxUnavailable: 1`, mà một lần drain phải tôn trọng. Broker nói chuyện
-với nhau qua RPC (33145) và Admin API (9644) bằng NetworkPolicy `redpanda-peers` của chart `svp-cluster`.
-
-Các hook của chart gọi Admin API bằng `curl` không xác thực, mà `admin_api_require_auth` từ chối, nên các hook trong `envs/prd/redpanda.yaml`
-thay chúng bằng cùng các bước với tư cách `svp-admin` (`RPK_USER`, `RPK_PASS` của container này, từ Secret `redpanda-bootstrap`):
-
-- trước khi broker dừng, nó vào maintenance mode và giao quyền leader partition của nó cho các broker khác (`rpk cluster maintenance
-  enable --wait`), để một rolling restart hay drain không bao giờ để partition không có leader; khi nó khởi động lại, nó rời maintenance
-  mode;
-- id của broker đến từ Admin API của chính nó (`/v1/node_config`, endpoint mà hook của chart đọc), credential trong header trên stdin của
-  `curl`, không bao giờ trên dòng lệnh;
-- mỗi hook bị chặn ở 45 s, một nửa `terminationGracePeriodSeconds` như của chart, và luôn thành công: một hook lỗi sẽ giết container;
-- cluster có một slot maintenance, nên `preStop` của broker thứ hai drain cùng lúc không drain; PodDisruptionBudget giữ một lần drain ở
-  một broker mỗi lúc.
-
 ## Loki
 
 Loki (chart `loki` của `grafana-community.github.io/helm-charts`). Image ghim theo digest, `appVersion` của chart ghi cạnh để người đọc;
@@ -905,10 +859,13 @@ không render mục `memory`.
 
 ## svp-data
 
-`envs/prd/svp-data.yaml`: ba broker Redpanda, mỗi availability zone một (`redpanda.yaml` cạnh file đó). Init Job với tới Admin API của mọi
-broker (`replicas`, cùng số với `statefulset.replicas` ở đó), nên nó vẫn đặt được user khi một broker down, và tạo mọi topic với ba
-replica: `acks=all`, mặc định của producer, khi đó đợi một đa số hai trong ba (Raft), như replication factor 3 với `min.insync.replicas` 2
-làm trên Kafka. Postgres và object store là của cluster (`platforms/eks/`).
+Trên k3d (`base/`), chart chạy trong namespace `svp-data` một broker Apache Kafka KRaft (StatefulSet `kafka`) và Valkey, cả hai chỉ
+nhận TLS bằng cert ký bởi CA local, cùng Job `kafka-init` tạo user, topic và ACL. `platforms/eks/svp-data.yaml` đặt `postgres`, `s3`,
+`kafka`, `valkey` thành `external`: không broker, Valkey hay object store trong cluster; Job `kafka-init` chỉ tạo topic và ACL trên
+Amazon MSK (user do Terraform gắn vào MSK), Deployment `svp-ops` (CLI vận hành) đăng nhập MSK và ElastiCache. Broker, host và subnet
+database đến từ `svp-data.values.tpl` (`cluster.kafkaBrokers`, `cluster.valkeyHost`, `cluster.dbCidrs`), các địa chỉ duy nhất Job init và
+`svp-ops` với tới (9096, 6379). Số broker, replication và việc chịu mất một availability zone ở prd là cấu hình của MSK
+([ADR-0053](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0053-msk-elasticache-valkey.md) của repo code), không ở đây.
 
 ## OpenTelemetry Collector
 
@@ -920,3 +877,13 @@ mọi pipeline từ 144 MiB heap (soft limit của nó: `limit_mib` 192 trừ `s
 - README của `memory_limiter` ở version ghim yêu cầu `GOMEMLIMIT` bằng 80% `limit_mib` (154 MiB), cùng spike limit 20% là soft limit, và spike
   limit ở đây là 25%.
 - Không dùng `useGOMEMLIMIT` của chart: nó đặt 80% limit của container, 204 MiB, trên cả hai limit, nên runtime để rác chồng lên quá chúng.
+
+Lag của consumer group (receiver `kafka_metrics` của config) đọc từ broker với tư cách user Kafka `svp-otelcol`, SASL_SSL, qua ba biến của
+`extraEnvs`: `SVP_KAFKA_OTELCOL_PASSWORD` (Secret `otelcol-kafka`, khoá `password`), `SVP_OTELCOL_KAFKA_BROKERS` và
+`SVP_OTELCOL_KAFKA_CA_FILE`. `base/` là của k3d: broker `kafka.svp-data.svc.cluster.local:9096` và CA local (Secret `local-ca` mount ở
+`/etc/svp-ca`, mode 0440, `fsGroup` của pod). `platforms/eks/` đặt broker của MSK (`cluster.kafkaBrokers`) và file CA rỗng (cert của MSK
+nối về CA công khai trong root hệ thống), bỏ volume của CA; danh sách thay cả danh sách khi ghép, nên mẫu nêu lại mọi biến của `base/`.
+Egress tới broker là NetworkPolicy của chart `svp-observability` (`kafka.mode` `external` và `kafka.external.cidrs` trên `eks`).
+Collector đọc Secret `otelcol-kafka` vào biến môi trường chỉ lúc khởi động: annotation `secret.reloader.stakater.com/reload` (giá trị
+`otelcol-kafka`) trên pod template (`podAnnotations`) cho Reloader restart nó khi Secret đổi (xoay mật khẩu `svp-otelcol`), như operator
+KEDA với `keda-kafka`.

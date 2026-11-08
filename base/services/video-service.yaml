@@ -10,7 +10,7 @@ resources:
   limits: {cpu: 500m, memory: 256Mi}
 env:
   LISTEN_ADDR: ":9102"
-  KAFKA_BROKERS: redpanda.svp-data.svc.cluster.local:9092
+  KAFKA_BROKERS: kafka.svp-data.svc.cluster.local:9096
   # Calls to the object store stay in the cluster; the presigned upload URLs handed to clients name it through Gateway
   # svp: the browser uploads straight to the store, so the host in the form must be reachable from outside.
   S3_ENDPOINT: http://s3.svp-data:9000
@@ -21,4 +21,11 @@ env:
 # SENTRY_DSN from Secret sentry (errors to GlitchTip in svp-obs).
 errorTracking: true
 ingressFrom: [gateway]
-egressTo: [postgres, redpanda, s3, collector, pyroscope, glitchtip]
+egressTo: [postgres, kafka, s3, collector, pyroscope, glitchtip]
+# Peer kafka for a chart from before it, the revision envs/prd/charts.yaml pins until the first promote to prd is one;
+# the chart's own peer kafka is the same. Drop it once prd pins a chart with peer kafka.
+peers:
+  kafka:
+    namespace: svp-data
+    labels: {app.kubernetes.io/name: kafka}
+    ports: [9096]

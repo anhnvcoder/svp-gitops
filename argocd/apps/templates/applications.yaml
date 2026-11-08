@@ -191,6 +191,7 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
 {{- if $platformTemplates }}
 {{- $cidr := "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$" }}
 {{- $host := "^([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z][a-z0-9-]*[a-z0-9]$" }}
+{{- $hostName := trimSuffix "$" (trimPrefix "^" $host) }}
 {{- $shapes := dict
   "name" "^[a-z][a-z0-9-]*$"
   "region" "^[a-z]{2}(-[a-z]+)+-[0-9]+$"
@@ -203,7 +204,9 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
   "rdsAddress" $host
   "uploadsBucket" "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
   "mediaBucket" "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
-  "mediaDomain" $host }}
+  "mediaDomain" $host
+  "kafkaBrokers" (printf "^%s:9096(,%s:9096)*$" $hostName $hostName)
+  "valkeyHost" $host }}
 {{- range $key := keys $shapes | sortAlpha }}
 {{- $value := get $cluster $key }}
 {{- if not (and (kindIs "string" $value) (regexMatch (get $shapes $key) $value)) }}

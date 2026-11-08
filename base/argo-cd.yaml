@@ -18,8 +18,8 @@ applicationSet:
 
 configs:
   params:
-    # Server-side diff: the default diff lacks the defaults the API server fills in, so svp-cluster, redpanda, svp-data
-    # and gateway stayed OutOfSync and selfHeal synced them forever. The two root levels (argocd/root) turn it off: they
+    # Server-side diff: the default diff lacks the defaults the API server fills in, so svp-cluster, svp-data and
+    # gateway stayed OutOfSync and selfHeal synced them forever. The two root levels (argocd/root) turn it off: they
     # apply their child Applications client-side, and a server-side dry run would not see a field deleted from them.
     controller.diff.server.side: "true"
   cm:

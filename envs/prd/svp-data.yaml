@@ -1,10 +1,3 @@
-# Production: three Redpanda brokers, one per availability zone (redpanda.yaml beside this file). The init Job reaches
-# the Admin API of every broker (replicas, the same number as statefulset.replicas there), so it still sets the users
-# with one broker down, and creates every topic with three replicas: acks=all, the producers' default, then waits for a
-# majority of two of them (Raft), as replication factor 3 with min.insync.replicas 2 does on Kafka.
-redpanda:
-  replicas: 3
-  topicReplicas: 3
 # Read only by a chart from before s3.mode, which renders an object store in the cluster whatever the platform: the
 # revision envs/prd/charts.yaml pins until the first promote to prd is one. From s3.mode on, platforms/eks/svp-data.yaml
 # sets it external and the chart renders no store and reads neither. Placeholders under the reserved .example TLD, which

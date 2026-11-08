@@ -1,0 +1,4 @@
+# Platform eks: the brokers are Amazon MSK's, whose certificate chains to a public CA among the system's roots, so no
+# local CA is mounted. The brokers come from otel-collector.values.tpl beside this file.
+extraVolumes: []
+extraVolumeMounts: []

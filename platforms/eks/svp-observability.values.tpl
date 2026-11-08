@@ -6,3 +6,7 @@ postgres:
   external:
     # The database subnets: GlitchTip and its init Job reach RDS there on 5432.
     cidrs: {{ .Values.cluster.dbCidrs | toJson }}
+kafka:
+  external:
+    # The database subnets: the Collector reaches the MSK brokers there on 9096.
+    cidrs: {{ .Values.cluster.dbCidrs | toJson }}
