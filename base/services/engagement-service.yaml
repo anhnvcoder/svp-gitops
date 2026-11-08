@@ -10,7 +10,7 @@ resources:
 env:
   LISTEN_ADDR: ":9103"
   # Produces and consumes engagement.views.v1: views are counted in batches.
-  KAFKA_BROKERS: redpanda.svp-data.svc.cluster.local:9092
+  KAFKA_BROKERS: kafka.svp-data.svc.cluster.local:9096
   # Most Postgres connections the process opens, those still being dialed included: half for GetStats, half for likes
   # and the views consumer, so GetStats calls the gateway cancels after 100 ms, whose connections pgx closes and dials
   # again, never take a connection a like needs. Set here because pgx's own default, max(4, NumCPU) per pool, changes
@@ -21,4 +21,11 @@ env:
 # SENTRY_DSN from Secret sentry (errors to GlitchTip in svp-obs).
 errorTracking: true
 ingressFrom: [gateway]
-egressTo: [postgres, redpanda, collector, pyroscope, glitchtip]
+egressTo: [postgres, kafka, collector, pyroscope, glitchtip]
+# Peer kafka for a chart from before it, the revision envs/prd/charts.yaml pins until the first promote to prd is one;
+# the chart's own peer kafka is the same. Drop it once prd pins a chart with peer kafka.
+peers:
+  kafka:
+    namespace: svp-data
+    labels: {app.kubernetes.io/name: kafka}
+    ports: [9096]

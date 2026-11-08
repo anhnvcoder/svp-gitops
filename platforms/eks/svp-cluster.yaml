@@ -6,8 +6,8 @@ cloudnativePG:
   enabled: false
 s3:
   mode: external
-# EKS has no default StorageClass and the EBS CSI driver makes none; the PersistentVolumeClaims that name no class
-# (Redpanda's) get this one, and those base/ pins to k3s's local-path name it in the files of this platform.
+# EKS has no default StorageClass and the EBS CSI driver makes none; the PersistentVolumeClaims that name no class get
+# this one, and those base/ pins to k3s's local-path name it in the files of this platform.
 storageClass:
   enabled: true
 
@@ -63,3 +63,7 @@ externalSecrets:
   enabled: true
   store: aws
   argocdNotifications: true
+  # Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose users Terraform makes and whose certificates chain to a
+  # public CA: none of the Secrets only an in-cluster broker and Valkey need (the users the init Job creates, the ACL
+  # file, the local CA and its server certificates).
+  localKafkaValkey: false

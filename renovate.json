@@ -309,29 +309,6 @@
     },
     {
       "matchFileNames": [
-        "base/redpanda.yaml"
-      ],
-      "groupName": "redpanda chart"
-    },
-    {
-      "matchFileNames": [
-        "argocd/apps/components.json"
-      ],
-      "matchDepNames": [
-        "redpanda"
-      ],
-      "groupName": "redpanda chart"
-    },
-    {
-      "description": "The broker image of svp-data (a chart of the code repository) and of compose there moves with the redpanda chart; Renovate of the code repository proposes those, keep the versions in step.",
-      "matchDepNames": [
-        "docker.io/redpandadata/redpanda",
-        "redpandadata/redpanda"
-      ],
-      "groupName": "redpanda chart"
-    },
-    {
-      "matchFileNames": [
         "base/loki.yaml"
       ],
       "groupName": "loki chart"

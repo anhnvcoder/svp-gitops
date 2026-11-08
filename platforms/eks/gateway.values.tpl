@@ -9,3 +9,9 @@ env:
   TRUSTED_PROXY_CIDRS: {{ .Values.cluster.vpcCidr | quote }}
 httpRoute:
   host: {{ printf "api.%s" .Values.cluster.domain | quote }}
+# Valkey is ElastiCache, reached by address in the database subnets on 6379 instead of the in-cluster pod.
+externalPeers:
+  valkey:
+  {{- range .Values.cluster.dbCidrs }}
+    - {cidr: {{ . | quote }}, ports: [6379]}
+  {{- end }}

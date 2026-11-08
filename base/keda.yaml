@@ -65,7 +65,7 @@ image:
 # What a taken-over operator keeps: read every ConfigMap, Service, ServiceAccount (not its tokens), EndpointSlice,
 # Deployment, ReplicaSet and StatefulSet of the cluster; set the replicas of any Deployment or StatefulSet and create,
 # change or delete any HPA (it can stop workloads, not read their Secrets); change KEDA's own objects; read the Secrets
-# of namespace keda: keda-kafka (svp-keda, which may only DESCRIBE) and KEDA's own CA and certificate.
+# of namespace keda: keda-kafka (svp-keda, which may only DESCRIBE), local-ca (k3d) and KEDA's own CA and certificate.
 extraObjects:
   # Dropped from the chart's rules: pods (get, list, watch), batch/jobs (create, delete, get, list, patch, update,
   # watch), and every verb on scaledjobs but get, list, watch, as well as scaledjobs/finalizers and scaledjobs/status.

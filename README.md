@@ -147,12 +147,17 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   `deploy/k8s/secrets.sh` của repo code ghi); ngoài đó cluster k3d chạy đúng `base/`.
 - `platforms/eks/`: Secret từ AWS Secrets Manager với store `aws` của External Secrets ở mọi env (entry `svp/<env>/<entry>`, region và role
   IAM mỗi namespace từ `cluster`; chart `svp-cluster` mở cho controller cổng 443 ra ngoài và agent Pod Identity), Postgres `external` (RDS
-  qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod Identity), StorageClass `gp3` mặc định của `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope
-  (Redpanda không ghim class, nhận class mặc định), issuer ACME Let's Encrypt production (DNS-01 Route 53), Service NLB của Envoy và
+  qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod Identity), Kafka `external` (Amazon MSK: Job
+  `kafka-init` của `svp-data` chỉ tạo topic và ACL, user do Terraform gắn), Valkey `external` (ElastiCache: host của `REDIS_URL` là
+  `cluster.valkeyHost`), không Secret chỉ-k3d của broker và Valkey trong cluster (`externalSecrets.localKafkaValkey: false`), không CA local
+  (`localCA: ""` của service, cert của MSK và ElastiCache nối về CA công khai trong root hệ thống), StorageClass `gp3` mặc định của
+  `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope, issuer ACME Let's Encrypt production
+  (DNS-01 Route 53), Service NLB của Envoy và
   NetworkPolicy của nó, nhãn `elbv2.k8s.aws/pod-readiness-gate-inject: enabled` trên namespace `envoy-gateway-system` (root đặt trong
   `managedNamespaceMetadata` của `envoy-gateway`, chỉ `eks`: pod Envoy mới chỉ Ready khi NLB thấy target khoẻ, nên rollout Envoy không
-  làm cổng vào từ chối kết nối), API server cổng 443, egress theo địa chỉ (`externalPeers` của `svp-service`: subnet RDS cổng 5432, dải S3 của region
-  cổng 443, agent Pod Identity `169.254.170.23` cổng 80), Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
+  làm cổng vào từ chối kết nối), API server cổng 443, egress theo địa chỉ (`externalPeers` của `svp-service`: subnet database cổng 5432
+  tới RDS, 9096 tới MSK, 6379 tới ElastiCache, dải S3 của region cổng 443, agent Pod Identity `169.254.170.23` cổng 80; Collector, Job init
+  và `svp-ops` tới MSK, ElastiCache theo cùng CIDR), Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
   `svp-root` (nhãn `svp.io/notify=root` do bootstrap gắn) ghi commit status `argocd/<env>` lên commit của repo này bằng GitHub App
   `svp-argocd-notifier`, Secret qua External Secrets (`externalSecrets.argocdNotifications` của `svp-cluster.yaml`); Telegram khi sync lỗi
   hay Degraded chỉ khi bootstrap gắn chat (annotation `svp.io/telegram-chat-id` của Secret cluster), chat không vào repo.
@@ -177,7 +182,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
 | `vpcCidr` | CIDR | `nodeSubnet` và `envoy.networkPolicy.healthCheckCIDR` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
-| `dbCidrs` | danh sách CIDR | `postgres.external.cidrs` của `svp-data`, `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service` |
+| `dbCidrs` | danh sách CIDR | `postgres.external.cidrs`, `kafka.external.cidrs`, `valkey.external.cidrs` của `svp-data`, `postgres.external.cidrs`, `kafka.external.cidrs` của `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service`, `externalPeers.kafka` (cổng 9096) của bốn service đó cùng `media-worker`, `externalPeers.valkey` (cổng 6379) của `gateway`, `feed-service`, `web` |
 | `domain` | tên miền | `apexHost` (web), `wildcardHost` `*.<domain>` của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web`; `domainFilters` của ExternalDNS |
 | `hostedZoneId` | `Z…` | `tls.acme.hostedZoneId` của `svp-cluster`, `--zone-id-filter` của ExternalDNS |
 | `acmeEmail` | email | `tls.acme.email` của `svp-cluster` |
@@ -185,6 +190,8 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `uploadsBucket` | tên bucket | `S3_UPLOADS_BUCKET` của `video-service`, `media-worker`; `UPLOAD_ORIGIN` `https://<uploadsBucket>.s3.<region>.amazonaws.com` của `web` |
 | `mediaBucket` | tên bucket | `S3_MEDIA_BUCKET` của `video-service`, `media-worker` |
 | `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_ORIGIN` của `web` |
+| `kafkaBrokers` | chuỗi `host:9096,host:9096,…`, một mục mỗi broker, không khoảng trắng (bootstrap SCRAM của MSK) | `KAFKA_BROKERS` của `user-service`, `video-service`, `engagement-service`, `feed-service`, `media-worker`; `kafka.brokers` của `svp-data` (Job `kafka-init`, `svp-ops`); `SVP_OTELCOL_KAFKA_BROKERS` của `otel-collector` |
+| `valkeyHost` | tên miền, không cổng (primary endpoint của ElastiCache) | `externalSecrets.valkey` (`<valkeyHost>:6379`, host của `REDIS_URL`) của `svp-cluster`; `valkey.host` của `svp-data` (`svp-ops`) |
 | `s3Cidrs` | danh sách CIDR | `externalPeers.s3` (cổng 443, cùng agent Pod Identity) của `video-service`, `media-worker` |
 | `externalSecretsRoles` | map đúng năm namespace `svp`, `svp-data`, `svp-obs`, `keda`, `argocd` → ARN role IAM | `externalSecrets.aws.roles` của `svp-cluster`: role SecretStore của từng namespace (thiếu namespace thì render dừng) |
 

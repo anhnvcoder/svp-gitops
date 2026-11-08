@@ -23,6 +23,8 @@ envoy:
 # namespace without a role fails here, before Argo CD gets a store that cannot authenticate.
 externalSecrets:
   prefix: {{ printf "svp/%s/" .Values.env | quote }}
+  # The primary endpoint of ElastiCache, the host of the REDIS_URL the ExternalSecrets of svp build.
+  valkey: {{ printf "%s:6379" $c.valkeyHost | quote }}
   aws:
     region: {{ $c.region | quote }}
     roles:

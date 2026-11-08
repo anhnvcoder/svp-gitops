@@ -23,8 +23,6 @@ env:
   HOSTNAME: 0.0.0.0
   # The only host the BFF calls: the gateway's Service, inside the cluster.
   GATEWAY_URL: http://gateway:8080
-  # Sessions and refresh locks in Valkey db 9 (keys svp:web:), beside the gateway's db 10 and feed-service's db 14.
-  REDIS_URL: redis://valkey.svp-data:6379/9
   # What the browser uses: the CSRF check, the __Host-Http- cookie with Secure, HSTS and the post-login redirect check
   # compare against it.
   APP_ORIGIN: https://svp.localhost:8443
@@ -34,10 +32,12 @@ env:
   UPLOAD_ORIGIN: https://s3.svp.localhost:8443
   SENTRY_ENVIRONMENT: k3d
 # SENTRY_DSN from Secret sentry (server errors and the browser's reports to GlitchTip in svp-obs). Secret web-env holds
-# NEXT_SERVER_ACTIONS_ENCRYPTION_KEY, set when the process starts so the key the image carries is never the one in use.
+# NEXT_SERVER_ACTIONS_ENCRYPTION_KEY, set when the process starts so the key the image carries is never the one in use,
+# and REDIS_URL: sessions and refresh locks in Valkey db 9 (keys svp:web:), beside the gateway's db 10 and
+# feed-service's db 14.
 errorTracking: true
 # Reached from Envoy only, on 3001; reaches the gateway, Valkey, the Collector and GlitchTip, nothing else: no
-# Postgres, Redpanda, object store, gRPC service, profiler, API server or internet (threat model WEB-13).
+# Postgres, Kafka, object store, gRPC service, profiler, API server or internet (threat model WEB-13).
 ingressFrom: [envoy]
 egressTo: [gateway, valkey, collector, glitchtip]
 # https://svp.localhost:8443: listener https-apex of Gateway svp, whose certificate names svp.localhost alone (chart

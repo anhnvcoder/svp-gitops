@@ -1,0 +1,3 @@
+# Platform eks: Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose certificates chain to a public CA among the
+# system's roots, so the lab cluster's local CA (the chart's localCA) is not mounted.
+localCA: ""

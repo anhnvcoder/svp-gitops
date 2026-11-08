@@ -1,4 +1,7 @@
-# Platform eks: GlitchTip's database svp_glitchtip is on Amazon RDS, reached by address (the database subnets, from
-# svp-observability.values.tpl beside this file); nothing scrapes a Postgres exporter there.
+# Platform eks: GlitchTip's database svp_glitchtip is on Amazon RDS and the Kafka brokers the Collector reads lag from
+# are Amazon MSK's, both reached by address (the database subnets, from svp-observability.values.tpl beside this
+# file); nothing scrapes a Postgres exporter there.
 postgres:
+  mode: external
+kafka:
   mode: external

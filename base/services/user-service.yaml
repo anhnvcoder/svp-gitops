@@ -12,11 +12,18 @@ resources:
 env:
   # The pod's address, so the gateway reaches it through the Service.
   LISTEN_ADDR: ":9101"
-  # Follow events go out through the outbox, as user svp-user-service (SASL SCRAM-SHA-256).
-  KAFKA_BROKERS: redpanda.svp-data.svc.cluster.local:9092
+  # Follow events go out through the outbox, as user svp-user-service (SASL SCRAM-SHA-512 over TLS).
+  KAFKA_BROKERS: kafka.svp-data.svc.cluster.local:9096
   PYROSCOPE_SERVER_ADDRESS: http://pyroscope.svp-obs:4040
   SENTRY_ENVIRONMENT: k3d
 # SENTRY_DSN from Secret sentry (errors to GlitchTip in svp-obs).
 errorTracking: true
 ingressFrom: [gateway]
-egressTo: [postgres, redpanda, collector, pyroscope, glitchtip]
+egressTo: [postgres, kafka, collector, pyroscope, glitchtip]
+# Peer kafka for a chart from before it, the revision envs/prd/charts.yaml pins until the first promote to prd is one;
+# the chart's own peer kafka is the same. Drop it once prd pins a chart with peer kafka.
+peers:
+  kafka:
+    namespace: svp-data
+    labels: {app.kubernetes.io/name: kafka}
+    ports: [9096]

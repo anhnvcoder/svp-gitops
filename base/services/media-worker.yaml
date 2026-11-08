@@ -8,7 +8,7 @@ resources:
   requests: {cpu: 500m, memory: 256Mi}
   limits: {cpu: "2", memory: 2Gi}
 env:
-  KAFKA_BROKERS: redpanda.svp-data.svc.cluster.local:9092
+  KAFKA_BROKERS: kafka.svp-data.svc.cluster.local:9096
   S3_ENDPOINT: http://s3.svp-data:9000
   S3_ACCESS_KEY_ID: svp-media-worker
   WORK_DIR: /work
@@ -27,10 +27,17 @@ scratch:
 # goes to whichever worker takes the partition, so waiting longer would not let the job finish: 30 s covers closing
 # the Kafka clients and flushing telemetry.
 terminationGracePeriodSeconds: 30
-# Reached by no pod (threat model FF-5); reaches Redpanda, the object store and the Collector only, never the internet,
+# Reached by no pod (threat model FF-5); reaches Kafka, the object store and the Collector only, never the internet,
 # the gateway or a gRPC service.
 ingressFrom: []
-egressTo: [redpanda, s3, collector]
+egressTo: [kafka, s3, collector]
+# Peer kafka for a chart from before it, the revision envs/prd/charts.yaml pins until the first promote to prd is one;
+# the chart's own peer kafka is the same. Drop it once prd pins a chart with peer kafka.
+peers:
+  kafka:
+    namespace: svp-data
+    labels: {app.kubernetes.io/name: kafka}
+    ports: [9096]
 # Scaled by KEDA on the lag of group media-worker on video.lifecycle.v1 (CPU says nothing about the queue: a worker
 # waiting for a job is idle while jobs pile up). Each worker handles one job at a time (one record per poll), so
 # lagThreshold 1 asks for one replica per record waiting or in hand, up to 2.

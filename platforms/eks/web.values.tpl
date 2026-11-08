@@ -8,3 +8,9 @@ env:
   UPLOAD_ORIGIN: {{ printf "https://%s.s3.%s.amazonaws.com" .Values.cluster.uploadsBucket .Values.cluster.region | quote }}
 httpRoute:
   host: {{ .Values.cluster.domain | quote }}
+# Valkey is ElastiCache, reached by address in the database subnets on 6379 instead of the in-cluster pod.
+externalPeers:
+  valkey:
+  {{- range .Values.cluster.dbCidrs }}
+    - {cidr: {{ . | quote }}, ports: [6379]}
+  {{- end }}

@@ -6,3 +6,6 @@ env:
   S3_CREDENTIALS: container
   S3_PATH_STYLE: "false"
   S3_ACCESS_KEY_ID: ""
+# Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose certificates chain to a public CA among the system's roots,
+# so the lab cluster's local CA (the chart's localCA) is not mounted.
+localCA: ""

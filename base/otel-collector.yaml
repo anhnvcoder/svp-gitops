@@ -29,6 +29,12 @@ configMap:
   create: false
   existingName: otel-collector-config
 
+# The Collector reads Secret otelcol-kafka (extraEnvs below) and, on k3d, the CA of Secret local-ca at its start only:
+# Reloader (base/reloader.yaml) restarts it when either changes. On the pod template, which Reloader reads when the
+# Deployment has no such annotation; a Secret absent on a platform (local-ca on eks) is simply never seen changing.
+podAnnotations:
+  secret.reloader.stakater.com/reload: otelcol-kafka,local-ca
+
 # OTLP/gRPC only, as in compose; the chart opens OTLP/HTTP, Jaeger and Zipkin by default. No host port either: the
 # chart's hostPort applies to daemonset mode only, and the Service is ClusterIP.
 ports:
@@ -53,6 +59,8 @@ podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
   runAsGroup: 10001
+  # The group the volume of Secret local-ca (mode 0440, below) is readable by.
+  fsGroup: 10001
   seccompProfile:
     type: RuntimeDefault
 securityContext:
@@ -74,6 +82,25 @@ useGOMEMLIMIT: false
 extraEnvs:
   - name: GOMEMLIMIT
     value: 140MiB
+  # Receiver kafka_metrics of the config reads the consumer groups' lag as Kafka user svp-otelcol over SASL_SSL. The
+  # broker of chart svp-data and the local CA its certificate chains to (Secret local-ca, chart svp-cluster) are a lab
+  # cluster's; platforms/eks/ names Amazon MSK's brokers, whose certificate chains to the system's roots.
+  - name: SVP_KAFKA_OTELCOL_PASSWORD
+    valueFrom:
+      secretKeyRef: {name: otelcol-kafka, key: password}
+  - name: SVP_OTELCOL_KAFKA_BROKERS
+    value: kafka.svp-data.svc.cluster.local:9096
+  - name: SVP_OTELCOL_KAFKA_CA_FILE
+    value: /etc/svp-ca/ca.crt
+extraVolumes:
+  - name: local-ca
+    secret:
+      secretName: local-ca
+      defaultMode: 0440
+extraVolumeMounts:
+  - name: local-ca
+    mountPath: /etc/svp-ca
+    readOnly: true
 resources:
   requests: {cpu: 50m, memory: 128Mi}
   limits: {memory: 256Mi}
