@@ -1,11 +1,11 @@
 # The commit of the code repository (https://github.com/anhnvcoder/svp-backend) whose charts, deploy/helm/*
 # there, this environment runs: every Application of a chart of that repository reads it at this commit. A change of
 # a chart reaches stg only through this file, together with the images it was built for.
-revision: 26ecc8a2dc54f4c4b6e4d3c9737013febea33cdc
+revision: d13e9a30ae860f45fafa88b17d885f1b0aae3da8
 # Derived from that commit; written with it, and the check of this repository computes both again from it.
 # podSecurityVersion of deploy/helm/svp-cluster/values.yaml: the Pod Security Standard version of the namespaces of
 # wave 0, which come before chart svp-cluster labels the others.
 podSecurityVersion: v1.36
 # sha256 of deploy/observability/otelcol/k8s-config.yaml: an annotation of the Collector's pod template, so a changed
 # config rolls the pod and an unchanged one does not.
-collectorConfigSha256: 6c643829959edb570caeace8392f39e96f00b90f212211296410e713e52988be
+collectorConfigSha256: cefcee2b6fb53e82210f65e7ccdcd0d62beb5c1a9a4a53a403c751a27cc398b4
