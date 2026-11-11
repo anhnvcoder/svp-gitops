@@ -10,6 +10,7 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [Argo CD](#argo-cd)
 - [Argo CD root (argocd/root, argocd/apps)](#argo-cd-root-argocdroot-argocdapps)
 - [AppProject svp](#appproject-svp)
+- [Karpenter](#karpenter)
 - [cert-manager](#cert-manager)
 - [Envoy Gateway](#envoy-gateway)
 - [External Secrets](#external-secrets)
@@ -309,7 +310,7 @@ Các namespace của dự án và của chart nền tảng, chỉ trên cluster 
 - `kube-system` chỉ vì chart của KEDA đặt RoleBinding `keda-operator-auth-reader` ở đó: nó bind Role
   `extension-apiserver-authentication-reader`, chỉ có ở `kube-system`, để metrics server của KEDA đọc được ConfigMap
   `extension-apiserver-authentication`. Không có nó, Application `keda` không bao giờ sync. Trên nền tảng `eks`, `kube-system` còn giữ AWS
-  Load Balancer Controller, namespace mà EKS Pod Identity association của nó nêu.
+  Load Balancer Controller và Karpenter, namespace mà EKS Pod Identity association của mỗi cái nêu.
 - `external-secrets` giữ External Secrets Operator; `svp-secrets` giữ các Secret nguồn mà store của nó đọc trên cluster lab (không chart
   nào ghi một cái ở đó: chart `svp-cluster` tạo namespace, Role và NetworkPolicy của nó).
 - `external-dns` giữ ExternalDNS (nền tảng `eks`).
@@ -328,6 +329,12 @@ Danh sách kind cluster-scoped cho phép có `ValidatingAdmissionPolicy` và `Va
 
 Không chart nào khác render một trong hai kind đó.
 
+### NodePool và EC2NodeClass
+
+Trên nền tảng `eks`, chart `svp-cluster` render NodePool `default` (`karpenter.sh`) và EC2NodeClass `default` (`karpenter.k8s.aws`), hai
+kind cluster-scoped mà danh sách cho phép (mục [Karpenter](#karpenter)). Chart của Karpenter chỉ mang CRD của chúng; NodeClaim do chính
+controller tạo lúc chạy, không qua Argo CD. Chart nằm ở repository OCI `public.ecr.aws/karpenter`, có trong `sourceRepos`.
+
 ### AppProject `default`
 
 `argocd-server` tạo AppProject `default` lúc khởi động khi nó thiếu, mở cho mọi repository, đích và kind, và một Application nêu nó (hay
@@ -335,6 +342,46 @@ không nêu project nào) sẽ thoát mọi giới hạn của `svp` ở trên. 
 cluster-scoped, mọi kind có namespace bị từ chối. `argocd-server` chỉ tạo nó khi nó chưa tồn tại (`initializeDefaultProject`,
 `server/server.go` của Argo CD v3.5.5), nên trạng thái rỗng này còn qua các lần khởi động lại; xoá nó thì bản mở trở lại ở lần khởi động kế
 của `argocd-server`.
+
+## Karpenter
+
+Karpenter (chart `karpenter` của `oci://public.ecr.aws/karpenter`), release `karpenter` ở namespace `kube-system`, wave -1 của
+`argocd/apps/components.json`, chỉ trên nền tảng `eks`. Nó cấp node cho mọi workload theo pod đang chờ, từ NodePool `default` và
+EC2NodeClass `default` mà chart `svp-cluster` render, và xử lý gián đoạn Spot từ hàng đợi SQS. Controller chạy trên nhóm node hệ thống
+on-demand do Terraform giữ; Argo CD và add-on EKS cũng chạy ở đó trước khi Karpenter có node đầu tiên. Lý do chọn Karpenter tự quản, các số
+của NodePool và cỡ nhóm node hệ thống: ADR-0056 của repo code.
+
+```mermaid
+flowchart LR
+  pod[Pod Pending] --> ctl[Karpenter controller<br/>kube-system, nhóm node hệ thống]
+  ctl -->|NodePool default,<br/>EC2NodeClass default| ec2[EC2 Fleet<br/>arm64, Spot hay on-demand]
+  ec2 --> node[Node mới<br/>AL2023 ghim] --> pod
+  eb[EventBridge<br/>Spot interruption, rebalance] --> sqs[SQS svp-env-karpenter] --> ctl
+  ctl -->|drain theo PDB,<br/>tối đa terminationGracePeriod| node
+```
+
+- **Wave -1**, trước mọi component khác: chart mang CRD của NodePool và EC2NodeClass mà `svp-cluster` (wave 1) render. Không phải wave 0:
+  component wave 0 nhận Pod Security `restricted` trên namespace của nó (mục [Pod Security cho wave 0](#pod-security-cho-wave-0)), mà pod
+  hệ thống của `kube-system` trên mỗi node mới (CNI, `kube-proxy`) không đạt.
+- **Credential.** `kube-system` và ServiceAccount `karpenter` là cặp mà EKS Pod Identity association của controller nêu (submodule
+  `karpenter` của module `eks` ở repo hạ tầng). Pod không tới được instance metadata (IMDSv2, hop limit 1), nên mẫu
+  `platforms/eks/karpenter.values.tpl` báo region (`AWS_REGION`), tên cluster (`settings.clusterName`) và hàng đợi interruption
+  (`settings.interruptionQueue`, `<cluster.name>-karpenter`).
+- **Tên suy từ cluster.** Role node `<cluster.name>-karpenter-node` và tag `karpenter.sh/discovery=<cluster.name>` của subnet private và
+  security group của node do Terraform tạo đúng nguyên văn, nên EC2NodeClass chỉ cần `karpenter.clusterName` (mẫu
+  `platforms/eks/svp-cluster.values.tpl`); hợp đồng `cluster` không thêm khoá.
+- **Replica và lịch.** Hai replica, PodDisruptionBudget `maxUnavailable: 1` và lịch của chart: một replica mỗi node và mỗi zone, không bao
+  giờ trên node do chính Karpenter quản (nodeAffinity `karpenter.sh/nodepool` không tồn tại). Request bằng limit, 1 CPU và 1 Gi mỗi replica,
+  theo hướng dẫn cài; cỡ nhóm node hệ thống tính trên số này.
+- **NodePool theo env.** `platforms/eks/svp-cluster.yaml` giữ NodePool đầy đủ của prd, chuẩn của nền tảng: `karpenter.enabled`, alias AMI,
+  `terminationGracePeriod`, capacity type, `limits` và ngân sách disruption. `envs/stg/svp-cluster.yaml` chỉ giữ phần stg giảm (chi phí,
+  khác biệt stg/prd được phép); prd không có overlay. Lớp nền tảng đủ giá trị nên chart render được mà không cần overlay env, như
+  check của repo code render nó. Root `aws/gitops/<env>` của repo hạ tầng đọc file env (nếu có) khi render namespace của `svp-cluster`.
+- **Gỡ cluster.** `terminationGracePeriod` là trần drain một node: quá trần Karpenter xoá node dù PodDisruptionBudget còn chặn eviction, nên
+  bước xoá NodePool trước `terraform destroy` (`pre-destroy.sh` của repo hạ tầng) luôn kết thúc.
+- **Version.** Chart và image đi qua Renovate như component khác; chart chỉ chạy trên `eks`, nên `make k8s-up` không thử nó: trước khi merge
+  đọc bảng tương thích với minor EKS và hướng dẫn nâng cấp (CRD, IAM), lần chạy đầu là buổi stg. Alias AMI `al2023@v<ngày>` ghim tay cùng bản
+  phát hành của nhóm node hệ thống (datasource AMI của Renovate cần credential AWS); bước nâng ở runbook nâng minor EKS của repo hạ tầng.
 
 ## cert-manager
 
@@ -421,6 +468,13 @@ trên cluster lab, do `make eks-secrets` của repo code ghi; store của mỗi 
 entry mà namespace đó đọc (`templates/external-secrets.yaml` của chart `svp-cluster` liệt kê chúng), cùng EKS Pod Identity của controller.
 Prefix, region và role phụ thuộc môi trường và account: `svp-cluster.values.tpl` cạnh `platforms/eks/svp-cluster.yaml`. Secret
 `argocd/argocd-notifications-secret` của Argo CD Notifications đến qua External Secrets như mọi Secret khác, từ entry `argocd-notifications`.
+
+Trên `eks`, host Postgres trong mọi chuỗi kết nối mà ExternalSecret dựng (bốn service, Job migrate, GlitchTip) là địa chỉ của instance RDS
+(`externalSecrets.postgres` = `<cluster.rdsAddress>:5432`, mẫu `svp-cluster.values.tpl`): `sslmode=verify-full` kiểm cert của server theo
+host được gọi, và cert của RDS chỉ mang tên đó. CA mà client tin là bundle CA của RDS cho `ap-southeast-1` (`rdsCA.bundle` của
+`platforms/eks/svp-cluster.yaml`, chép nguyên từ truststore công khai của RDS, nguồn và sha256 ở comment cạnh đó), chart render thành Secret
+`rds-ca` ở `svp`, `svp-obs`, `svp-data`. Bốn service có Postgres mount nó qua `localCA: rds-ca` (`platforms/eks/<service>.yaml`); GlitchTip và
+Job `pg-bootstrap` chọn Secret theo `postgres.mode` của chart. Bundle công khai nên nằm trong git, không trong kho secret.
 
 ## AWS Load Balancer Controller
 
@@ -640,6 +694,14 @@ Mọi pod của chart đạt Pod Security `restricted` (non-root uid 65534, root
 namespace, chỉ volume `emptyDir` và projected token), mà namespace `kyverno` áp: chart `svp-cluster` (wave 1) tạo nó với nhãn đó và
 NetworkPolicy của nó (default-deny; DNS; API server; lời gọi webhook từ API server; TCP 443 tới địa chỉ public thôi, cho GHCR và TUF của
 Sigstore). Request và limit giữ của chart: admission controller 100m/128Mi, limit 384Mi; reports controller 100m/64Mi, limit 128Mi.
+
+### HA trên EKS
+
+Trên `eks`, `platforms/eks/kyverno.yaml` chạy admission controller 3 replica, PodDisruptionBudget `maxUnavailable: 1` (mặc định
+`minAvailable: 1` của chart cho phép mất hai trong ba) và `topologySpreadConstraints` theo `topology.kubernetes.io/zone` (`maxSkew: 1`,
+`ScheduleAnyway`), trước anti-affinity ưu tiên theo hostname của chart. Webhook của policy fail-closed cho `svp`, nên mất node hay zone của một
+replica duy nhất là dừng mọi pod mới ở đó (mục dưới). Reports controller giữ một replica: nó không nằm trên đường admission. k3d giữ một replica
+của `base/` (máy 16 GB).
 
 ### Kyverno down
 

@@ -15,6 +15,18 @@
   },
   "components": [
     {
+      "name": "karpenter",
+      "namespace": "kube-system",
+      "wave": -1,
+      "repo": "oci://public.ecr.aws/karpenter",
+      "chart": "karpenter",
+      "version": "1.15.1",
+      "values": "base/karpenter.yaml",
+      "platforms": [
+        "eks"
+      ]
+    },
+    {
       "name": "cert-manager",
       "namespace": "cert-manager",
       "wave": 0,

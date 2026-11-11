@@ -6,6 +6,7 @@ env:
   S3_CREDENTIALS: container
   S3_PATH_STYLE: "false"
   S3_ACCESS_KEY_ID: ""
-# Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose certificates chain to a public CA among the system's roots,
-# so the lab cluster's local CA (the chart's localCA) is not mounted.
-localCA: ""
+# Postgres is Amazon RDS, reached with sslmode=verify-full against its regional CA bundle, Secret rds-ca of chart
+# svp-cluster, mounted at /etc/svp-ca as the chart's localCA. Kafka is Amazon MSK, whose certificate chains to a public
+# CA among the system's roots.
+localCA: rds-ca

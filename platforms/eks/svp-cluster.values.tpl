@@ -14,6 +14,9 @@ tls:
     email: {{ $c.acmeEmail | quote }}
     hostedZoneId: {{ $c.hostedZoneId | quote }}
     region: {{ $c.region | quote }}
+# EC2NodeClass default: node role <name>-karpenter-node and discovery tag karpenter.sh/discovery=<name> of the cluster.
+karpenter:
+  clusterName: {{ $c.name | quote }}
 envoy:
   networkPolicy:
     # The NLB's health checks come from its nodes' addresses in the VPC.
@@ -23,6 +26,9 @@ envoy:
 # namespace without a role fails here, before Argo CD gets a store that cannot authenticate.
 externalSecrets:
   prefix: {{ printf "svp/%s/" .Values.env | quote }}
+  # The RDS instance's own address, the host of every connection string the ExternalSecrets build: sslmode=verify-full
+  # checks the server's certificate against the host called, and RDS's certificate holds only that name.
+  postgres: {{ printf "%s:5432" $c.rdsAddress | quote }}
   # The primary endpoint of ElastiCache, the host of the REDIS_URL the ExternalSecrets of svp build.
   valkey: {{ printf "%s:6379" $c.valkeyHost | quote }}
   aws:

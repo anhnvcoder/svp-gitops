@@ -1,0 +1,22 @@
+# Platform eks: the admission controller in high availability. Its webhook fails closed for namespace svp, so a node or
+# a zone lost with the one replica of base/ would stop every new pod there; three replicas over the zones keep
+# admission while one is drained or its zone is gone. k3d keeps the base's one replica (a 16 GB machine).
+# Design notes: docs/components.md.
+admissionController:
+  replicas: 3
+  # One replica down at a time: the chart's default budget (minAvailable 1) would let a drain take two of the three.
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: null
+    maxUnavailable: 1
+  # Over the zones first, then the chart's preferred anti-affinity spreads them over nodes. ScheduleAnyway: with a
+  # zone full the replica runs in another one rather than staying Pending.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: admission-controller
+          app.kubernetes.io/instance: kyverno
+          app.kubernetes.io/part-of: kyverno
