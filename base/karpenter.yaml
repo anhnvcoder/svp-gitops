@@ -1,0 +1,30 @@
+# Karpenter v1.15.1 (chart oci://public.ecr.aws/karpenter karpenter 1.15.1), release karpenter in namespace kube-system,
+# wave -1 of argocd/apps/components.json, on platform eks only: it launches the nodes of every workload (NodePool and
+# EC2NodeClass default of chart svp-cluster) and handles Spot interruptions from its SQS queue.
+# Design notes: docs/components.md.
+
+# Wave -1, before every other component: Karpenter brings the CRDs of NodePool and EC2NodeClass, which svp-cluster
+# (wave 1) renders. Not wave 0: a component of wave 0 gets Pod Security "restricted" on its namespace, which the system
+# pods of kube-system (the CNI's, kube-proxy's on each new node) do not meet.
+
+# kube-system and ServiceAccount karpenter are the pair the controller's EKS Pod Identity association names (the
+# infrastructure repository): the pod gets its role's credentials from the Pod Identity agent, never from the node.
+serviceAccount:
+  name: karpenter
+
+# Two replicas, the PodDisruptionBudget (maxUnavailable 1) and the scheduling the chart has: one replica per node and
+# per zone, never on a node Karpenter itself manages (nodeAffinity on karpenter.sh/nodepool), so the controller runs on
+# the on-demand system node group and a consolidation never evicts the controller deciding it.
+
+# Requests equal limits, as the install guide sizes the controller: the system node group is sized on this request.
+controller:
+  resources:
+    requests: {cpu: "1", memory: 1Gi}
+    limits: {cpu: "1", memory: 1Gi}
+  # By digest (multi-arch index: linux/amd64 and linux/arm64), the chart's own tag beside it for the reader: a tag can
+  # be pushed again to other content, a digest cannot. The chart renders repository:tag@digest when digest is set, so
+  # tag holds version@digest and the chart's digest is emptied.
+  image:
+    repository: public.ecr.aws/karpenter/controller
+    tag: 1.15.1@sha256:8314ff9c6bca66372031e80532c18025bbe6d34eae2443849d9ff02796fb09c8
+    digest: ""

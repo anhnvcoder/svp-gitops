@@ -1,7 +1,7 @@
-# Platform eks: Postgres is Amazon RDS (Service svp-pg-rw becomes an ExternalName for it, so every connection string
-# stays the same; the pg-bootstrap Job makes the roles and databases there as RDS's master user), objects are on Amazon
-# S3, Kafka is Amazon MSK (Job kafka-init makes the topics and ACLs there) and Valkey Amazon ElastiCache: no
-# CloudNativePG Cluster, backup, object store, broker or Valkey here. Their addresses come from svp-data.values.tpl.
+# Platform eks: Postgres is Amazon RDS (the pg-bootstrap Job makes the roles and databases there as RDS's master user,
+# by the instance's address with verify-full against Secret rds-ca), objects are on Amazon S3, Kafka is Amazon MSK (Job
+# kafka-init makes the topics and ACLs there) and Valkey Amazon ElastiCache: no CloudNativePG Cluster, backup, object
+# store, broker or Valkey here. Their addresses come from svp-data.values.tpl.
 postgres:
   mode: external
 s3:

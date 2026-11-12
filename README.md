@@ -140,17 +140,22 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   `eks` cả `stg` và `prd`) và `localHosts: true` khi render của nó được nêu tên lab `*.svp.localhost` (chỉ `k3d`; vắng là không được). Root
   chart không đọc khoá này; check của repo code đọc nó (thiếu hay sai dạng là đỏ), job `diff-preview` cũng render theo nó.
 - Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
-  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `aws-load-balancer-controller` (NLB trước Envoy từ Service
+  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `karpenter` (node cho workload theo pod đang chờ, wave -1
+  vì mang CRD của NodePool mà `svp-cluster` render), `aws-load-balancer-controller` (NLB trước Envoy từ Service
   của Envoy, wave 1 vì Gateway `svp` chỉ `Programmed` khi Service có địa chỉ), `external-dns` (bản ghi Route 53 cho host của HTTPRoute gắn
   vào Gateway `svp`, wave 2). Đường dev (`make k8s-up`) chạy component của `k3d`.
 - `platforms/k3d/`: Secret từ External Secrets với store `kubernetes` (`svp-cluster.yaml`: Secret nguồn ở namespace `svp-secrets` do
   `deploy/k8s/secrets.sh` của repo code ghi); ngoài đó cluster k3d chạy đúng `base/`.
 - `platforms/eks/`: Secret từ AWS Secrets Manager với store `aws` của External Secrets ở mọi env (entry `svp/<env>/<entry>`, region và role
-  IAM mỗi namespace từ `cluster`; chart `svp-cluster` mở cho controller cổng 443 ra ngoài và agent Pod Identity), Postgres `external` (RDS
-  qua Service `ExternalName`), object store `external` (S3 virtual-hosted, credential Pod Identity), Kafka `external` (Amazon MSK: Job
+  IAM mỗi namespace từ `cluster`; chart `svp-cluster` mở cho controller cổng 443 ra ngoài và agent Pod Identity), node của workload do
+  Karpenter cấp (NodePool `default` của `svp-cluster`, giá trị prd ở đây; phần stg giảm ở `envs/stg/svp-cluster.yaml`),
+  Kyverno 3 replica trải zone (`kyverno.yaml`), Postgres `external` (RDS, chuỗi kết nối tới địa chỉ instance với `sslmode=verify-full`,
+  Secret `rds-ca` từ bundle CA của RDS, `localCA: rds-ca` của bốn service có Postgres), object store `external` (S3 virtual-hosted,
+  credential Pod Identity), Kafka `external` (Amazon MSK: Job
   `kafka-init` của `svp-data` chỉ tạo topic và ACL, user do Terraform gắn), Valkey `external` (ElastiCache: host của `REDIS_URL` là
   `cluster.valkeyHost`), không Secret chỉ-k3d của broker và Valkey trong cluster (`externalSecrets.localKafkaValkey: false`), không CA local
-  (`localCA: ""` của service, cert của MSK và ElastiCache nối về CA công khai trong root hệ thống), StorageClass `gp3` mặc định của
+  (`localCA: ""` của service không có Postgres, cert của MSK và ElastiCache nối về CA công khai trong root hệ thống), StorageClass `gp3`
+  mặc định của
   `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope, issuer ACME Let's Encrypt production
   (DNS-01 Route 53), Service NLB của Envoy và
   NetworkPolicy của nó, nhãn `elbv2.k8s.aws/pod-readiness-gate-inject: enabled` trên namespace `envoy-gateway-system` (root đặt trong
@@ -177,8 +182,8 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 
 | Khoá | Dạng | Ai dùng (mẫu ở `platforms/eks/`) |
 | --- | --- | --- |
-| `name` | tên cluster EKS | `clusterName` của `aws-load-balancer-controller`, `txtOwnerId` của `external-dns` |
-| `region` | region AWS | `region` của LBC, `AWS_DEFAULT_REGION` của ExternalDNS, `tls.acme.region` và `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
+| `name` | tên cluster EKS | `clusterName` của `aws-load-balancer-controller`, `txtOwnerId` của `external-dns`, `settings.clusterName` và hàng đợi `settings.interruptionQueue` (`<name>-karpenter`) của `karpenter`, `karpenter.clusterName` (role node, tag discovery) của `svp-cluster` |
+| `region` | region AWS | `region` của LBC, `AWS_DEFAULT_REGION` của ExternalDNS, `AWS_REGION` của `karpenter`, `tls.acme.region` và `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
 | `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
 | `vpcCidr` | CIDR | `nodeSubnet` và `envoy.networkPolicy.healthCheckCIDR` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
@@ -186,7 +191,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `domain` | tên miền | `apexHost` (web), `wildcardHost` `*.<domain>` của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web`; `domainFilters` của ExternalDNS |
 | `hostedZoneId` | `Z…` | `tls.acme.hostedZoneId` của `svp-cluster`, `--zone-id-filter` của ExternalDNS |
 | `acmeEmail` | email | `tls.acme.email` của `svp-cluster` |
-| `rdsAddress` | tên miền | `postgres.external.host` của `svp-data` |
+| `rdsAddress` | tên miền | `postgres.external.host` của `svp-data`; `externalSecrets.postgres` (`<rdsAddress>:5432`, host của mọi `DATABASE_URL`) của `svp-cluster` |
 | `uploadsBucket` | tên bucket | `S3_UPLOADS_BUCKET` của `video-service`, `media-worker`; `UPLOAD_ORIGIN` `https://<uploadsBucket>.s3.<region>.amazonaws.com` của `web` |
 | `mediaBucket` | tên bucket | `S3_MEDIA_BUCKET` của `video-service`, `media-worker` |
 | `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_ORIGIN` của `web` |

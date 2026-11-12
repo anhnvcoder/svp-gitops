@@ -1,0 +1,10 @@
+# Staging's NodePool default (chart svp-cluster) below production's of platforms/eks/svp-cluster.yaml: Spot, whose
+# interruptions every session then exercises through Karpenter's queue; a lower cost ceiling; half the nodes may be
+# replaced at once, since staging lives for one session and keeps no traffic of users.
+karpenter:
+  capacityTypes: [spot]
+  limits:
+    cpu: 16
+    memory: 64Gi
+  disruptionBudgets:
+    - nodes: "50%"

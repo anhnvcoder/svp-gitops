@@ -294,6 +294,33 @@
     },
     {
       "matchFileNames": [
+        "base/karpenter.yaml"
+      ],
+      "groupName": "karpenter chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "public.ecr.aws/karpenter/karpenter"
+      ],
+      "groupName": "karpenter chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json",
+        "base/karpenter.yaml"
+      ],
+      "matchDepNames": [
+        "public.ecr.aws/karpenter/**"
+      ],
+      "prBodyNotes": [
+        "Karpenter runs on platform eks only, so make k8s-up does not exercise it. Before merging, check its compatibility table (https://karpenter.sh/docs/upgrading/compatibility/) against the EKS minor of the infrastructure repository and the upgrade guide (https://karpenter.sh/docs/upgrading/upgrade-guide/) for CRD and IAM changes; it runs first in a staging session."
+      ]
+    },
+    {
+      "matchFileNames": [
         "base/kube-prometheus-stack.yaml"
       ],
       "groupName": "kube-prometheus-stack chart"
