@@ -6,21 +6,41 @@ nodeSubnet: {{ $c.vpcCidr | quote }}
 # Service kubernetes: the first address of the cluster's service range (a network address ending in .0, which the
 # root chart checks).
 kubeAPIServiceIP: {{ printf "%s.%s.%s.%d" (index $net 0) (index $net 1) (index $net 2) (add1 (atoi (index $net 3))) | quote }}
-# The web client at the domain itself (listener https-apex), the API and anything else below it (listener https).
+# Read only by a chart revision without listeners; with listeners below they name no listener.
 wildcardHost: {{ printf "*.%s" $c.domain | quote }}
 apexHost: {{ $c.domain | quote }}
-tls:
-  acme:
-    email: {{ $c.acmeEmail | quote }}
-    hostedZoneId: {{ $c.hostedZoneId | quote }}
-    region: {{ $c.region | quote }}
+# The ALB sends no SNI to its targets, so one listener with no hostname serves both names behind it: the web client at
+# the domain itself and the API at api.<domain>. Routes attach to it by its name, https.
+listeners:
+  - name: https
+    certificate: svp-edge
+    secretName: svp-edge-tls
+    dnsNames:
+      - {{ $c.domain | quote }}
+      - {{ printf "api.%s" $c.domain | quote }}
 # EC2NodeClass default: node role <name>-karpenter-node and discovery tag karpenter.sh/discovery=<name> of the cluster.
 karpenter:
   clusterName: {{ $c.name | quote }}
 envoy:
+  # The internal ALB's target group, made by Terraform; AWS Load Balancer Controller registers the Envoy pods in it.
+  targetGroupArn: {{ $c.edgeTargetGroupArn | quote }}
   networkPolicy:
-    # The NLB's health checks come from its nodes' addresses in the VPC.
-    healthCheckCIDR: {{ $c.vpcCidr | quote }}
+    # The ALB has addresses in the edge subnets alone, where no node or pod has one: from there only the ALB connects.
+    # Namespace svp-load: the k6 Job that measures the cluster straight at Service svp-envoy, past CloudFront and WAF.
+    httpsFrom:
+    {{- range $c.edgeCidrs }}
+      - ipBlock:
+          cidr: {{ . | quote }}
+    {{- end }}
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: svp-load
+    healthCheck:
+      from:
+      {{- range $c.edgeCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+      {{- end }}
 # The store of every namespace with ExternalSecrets (store aws, svp-cluster.yaml beside this file): entries
 # svp/<env>/<entry> of Secrets Manager in the cluster's region, read through the IAM role of that namespace. A
 # namespace without a role fails here, before Argo CD gets a store that cannot authenticate.

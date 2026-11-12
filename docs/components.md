@@ -18,7 +18,6 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [AWS Load Balancer Controller](#aws-load-balancer-controller)
 - [CloudNativePG](#cloudnativepg)
 - [Reloader](#reloader)
-- [ExternalDNS](#externaldns)
 - [Argo Rollouts](#argo-rollouts)
 - [Kyverno](#kyverno)
 - [KEDA](#keda)
@@ -313,7 +312,6 @@ Các namespace của dự án và của chart nền tảng, chỉ trên cluster 
   Load Balancer Controller và Karpenter, namespace mà EKS Pod Identity association của mỗi cái nêu.
 - `external-secrets` giữ External Secrets Operator; `svp-secrets` giữ các Secret nguồn mà store của nó đọc trên cluster lab (không chart
   nào ghi một cái ở đó: chart `svp-cluster` tạo namespace, Role và NetworkPolicy của nó).
-- `external-dns` giữ ExternalDNS (nền tảng `eks`).
 - `reloader` giữ Reloader, mà Role và RoleBinding đi vào `svp`, `svp-data`, `svp-obs` và `keda`, đã có trong danh sách.
 
 ### ValidatingAdmissionPolicy và binding
@@ -396,18 +394,18 @@ nó. Quyền, trong mọi namespace:
 
 Vì sao giữ:
 
-- Các Certificate nằm ở nhiều namespace (trên cả hai nền tảng: `svp-edge`: `svp-wildcard` và `svp-apex`; `keda`: của operator, metrics
+- Các Certificate nằm ở nhiều namespace (trên cả hai nền tảng: `svp-edge`: của listener Gateway `svp` (`svp-wildcard` và `svp-apex` trên
+  cluster lab, `svp-edge` trên EKS); `keda`: của operator, metrics
   server và webhook; trên cluster lab còn `cert-manager`: `svp-local-ca` và `cnpg-system`: `cnpg-webhook`, webhook của CloudNativePG; trên
   EKS còn `kube-system`: webhook của AWS Load Balancer Controller), và controller ghi mỗi key pair vào namespace của Certificate của nó và
   watch các Secret đó.
 - v1.21.2 không có RBAC theo namespace, và `--namespace` làm controller phục vụ một namespace và tắt ClusterIssuer, mà `svp-selfsigned` và
-  `svp-ca` (lab) và `svp-acme` (EKS) chính là ClusterIssuer.
+  `svp-ca` chính là ClusterIssuer.
 - cainjector ghi CA của KEDA vào APIService `v1beta1.external.metrics.k8s.io` và ValidatingWebhookConfiguration `keda-admission`, CA của
   CloudNativePG vào `cnpg-mutating-webhook-configuration` và `cnpg-validating-webhook-configuration` (lab), CA của AWS Load Balancer
   Controller vào hai webhook configuration của nó (EKS), và CA của chính cert-manager vào webhook configuration và CRD của nó; đó là điều
   cho phép các operator kia không giữ quyền nào trên webhook và APIService.
-- Trên cluster lab, quyền ACME không dùng (issuer của nó là CA cục bộ); trên EKS, ClusterIssuer `svp-acme` của chart `svp-cluster` giải
-  DNS-01 trên Route 53, cũng không cần pod, Service, Ingress hay HTTPRoute của solver HTTP-01.
+- Quyền ACME không dùng: trên cả hai nền tảng mọi issuer là CA riêng của cluster.
 - Chart không bỏ chúng riêng được, và với Secret của mọi namespace vẫn đọc được, render RBAC của nó ở đây thiếu các quyền đó cũng không
   đổi cái một token bị đánh cắp đọc được.
 
@@ -423,7 +421,8 @@ Controller chỉ watch các namespace sau, và chart bind các luật có namesp
 EndpointSlice, Deployment, các kind của Gateway API và Envoy Gateway) trong một Role ở mỗi namespace thay vì cluster-wide; cái còn cluster-wide
 là quyền đọc node và namespace, GatewayClass và ServiceImport, không Secret, không pod.
 
-- `svp-edge`: Gateway `svp` và các Secret certificate `svp-wildcard-tls` và `svp-apex-tls`.
+- `svp-edge`: Gateway `svp` và các Secret certificate của nó (`svp-wildcard-tls` và `svp-apex-tls` trên cluster lab, `svp-edge-tls` trên
+  EKS).
 - `svp` và `svp-data`: HTTPRoute `api`, `web` và `s3` và các Service backend của chúng (các namespace mang nhãn `svp-gateway-routes` ở
   chart `svp-cluster`; một namespace được cho route ở đó phải được thêm vào đây, không thì route của nó không bao giờ được thấy).
 - `envoy-gateway-system`: EnvoyProxy `svp` của GatewayClass `svp`, các Secret certificate của chính controller và đội Envoy nó chạy ở đó.
@@ -479,14 +478,18 @@ Job `pg-bootstrap` chọn Secret theo `postgres.mode` của chart. Bundle công 
 ## AWS Load Balancer Controller
 
 AWS Load Balancer Controller (chart `aws-load-balancer-controller` của `aws.github.io/eks-charts`), release cùng tên ở namespace
-`kube-system`, wave 1 của `argocd/apps/components.json`, chỉ trên nền tảng `eks`. Nó tạo NLB internet-facing trước Envoy từ Service của
-EnvoyProxy `svp` (chart `svp-cluster`: annotation của nó đòi type `external`, target type `ip`, giữ địa chỉ client), rồi đăng ký địa chỉ
-pod Envoy vào target group của NLB (TargetGroupBinding). Version là bản có IAM policy mà repo hạ tầng gán cho role của controller
-(`aws/modules/eks/policies` ở đó): version mới đi cùng policy đó, đồng bộ.
+`kube-system`, wave 1 của `argocd/apps/components.json`, chỉ trên nền tảng `eks`. Nó không tạo load balancer nào: ALB internal, listener
+và target group kiểu `ip` của nó do Terraform của repo hạ tầng tạo. Controller đăng ký địa chỉ pod Envoy vào target group đó theo
+TargetGroupBinding `svp-envoy` của chart `svp-cluster` (Service `svp-envoy` kiểu `ClusterIP`, `envoy.targetGroupArn` từ
+`cluster.edgeTargetGroupArn`), và mang CRD cùng webhook của kind đó. Version là bản có IAM policy mà repo hạ tầng gán cho role của
+controller (`aws/modules/eks/policies` ở đó): version mới đi cùng policy đó, đồng bộ.
 
-- **Wave 1**, cạnh `svp-cluster` chứ không sau nó: Gateway `svp` của `svp-cluster` chỉ báo Programmed (cái health check Gateway của Argo
-  CD đợi) khi Service của nó có địa chỉ, của NLB; wave sau sẽ đợi mãi. Cũng không phải wave 0: certificate webhook của nó đến từ cert-manager
+- **Wave 1**, cạnh `svp-cluster` chứ không sau nó: `svp-cluster` render TargetGroupBinding, mà CRD và webhook đến cùng chart này; Argo CD
+  sync được nhờ `SkipDryRunOnMissingResource` và retry (`argocd/apps/templates/applications.yaml`). Đặt controller ở wave sau thì
+  TargetGroupBinding của wave 1 thiếu CRD, wave 1 không bao giờ xong. Cũng không phải wave 0: certificate webhook của nó đến từ cert-manager
   (wave 0), và một component wave 0 nhận Pod Security `restricted` trên namespace của nó, mà pod hệ thống của `kube-system` không đạt.
+- **Webhook Service tắt** (`enableServiceMutatorWebhook: false`): nó nhận mọi Service `LoadBalancer` mới về controller và fail closed; ở
+  đây không Service nào kiểu đó, nên nó chỉ thêm một chỗ hỏng.
 - **Credential.** `kube-system` và ServiceAccount `aws-load-balancer-controller` là cặp mà EKS Pod Identity association của controller nêu
   (repo hạ tầng): pod nhận credential của role từ agent Pod Identity, không bao giờ từ node (IMDSv2 với hop limit 1 giữ pod khỏi role của
   node), nên controller cũng được báo region và VPC thay vì đọc chúng từ instance metadata.
@@ -599,27 +602,6 @@ Các release `gateway` và `web` là Rollout; mỗi cái còn đặt `reloader.s
 `argoproj.io/v1alpha1`, mà CRD đó Argo Rollouts mang tới cùng wave: trên cluster mới Argo CD có thể render chart này trước khi CRD tồn
 tại, và thêm luật ở lần refresh kế của Application (`timeout.reconciliation` 60 s, `base/argo-cd.yaml`), trước khi chính các Rollout tồn
 tại (wave 7).
-
-## ExternalDNS
-
-ExternalDNS (chart `external-dns` của `kubernetes-sigs.github.io/external-dns/`), release `external-dns` ở namespace `external-dns`, wave 2
-của `argocd/apps/components.json`, chỉ trên nền tảng `eks`. Nó ghi bản ghi DNS của hostname của các HTTPRoute gắn vào Gateway `svp` (của
-API, của web client) vào hosted zone Route 53 của môi trường (stg `stg.aws.<domain>`, prd `aws.<domain>`, mỗi cái ở account của môi
-trường), mỗi bản ghi là alias của NLB mà AWS Load Balancer Controller tạo cho Envoy (địa chỉ trong status của Gateway), và xoá chúng khi
-route biến mất.
-
-- **Wave 2:** namespace của nó đến từ chart `svp-cluster` (wave 1, `platformNamespaces` của `platforms/eks/svp-cluster.yaml`) với Pod
-  Security `restricted` trước pod đầu tiên, và các route nó đọc không cần gì của nó để tồn tại.
-- **Quyền.** `external-dns` và ServiceAccount `external-dns` là cặp mà EKS Pod Identity association của role của nó nêu (repo hạ tầng):
-  role chỉ được đổi bản ghi A, AAAA, CNAME và TXT của zone của môi trường. ClusterRole của nó, của chart: `get`, `list` và `watch` Gateway,
-  HTTPRoute và namespace, không gì khác (không Secret, không Service, không pod). Pod của nó đạt `restricted` như chart render (non-root,
-  root filesystem chỉ đọc, drop ALL, seccomp `RuntimeDefault`).
-- **Nó được chạm vào đâu,** mỗi giới hạn đứng riêng: chỉ zone của `cluster.hostedZoneId` (`--zone-id-filter`), zone public, chỉ tên dưới
-  `cluster.domain` (`domainFilters`, với `--aws-zone-match-parent` để zone phía trên một tên khớp: trên prd domain chính là apex của zone,
-  trên stg zone là `stg.aws.<domain>`, phía trên `api.stg.aws.<domain>`), và trong số đó chỉ các bản ghi nó sở hữu: registry `txt` ghi một bản
-  ghi TXT của owner `cluster.name` cạnh mỗi bản ghi nó tạo, và policy `sync` chỉ xoá bản ghi có owner đó. Bản ghi NS và SOA của zone, và
-  mọi bản ghi nó không tạo, giữ nguyên; không quản lý loại bản ghi nào ngoài A, AAAA và CNAME (mặc định). Zone id, domain và owner đến từ
-  value `cluster` (`platforms/eks/external-dns.values.tpl`).
 
 ## Argo Rollouts
 

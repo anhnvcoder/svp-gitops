@@ -199,8 +199,7 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
   "vpcCidr" $cidr
   "serviceCidr" "^([0-9]{1,3}\\.){3}0/(1[2-9]|2[0-4])$"
   "domain" $host
-  "hostedZoneId" "^Z[0-9A-Z]+$"
-  "acmeEmail" "^[^@[:space:]]+@[^@[:space:]]+$"
+  "edgeTargetGroupArn" "^arn:aws:elasticloadbalancing:[a-z]{2}(-[a-z]+)+-[0-9]+:[0-9]{12}:targetgroup/[A-Za-z0-9-]+/[0-9a-f]+$"
   "rdsAddress" $host
   "uploadsBucket" "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
   "mediaBucket" "^[a-z0-9][a-z0-9.-]+[a-z0-9]$"
@@ -213,7 +212,7 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
 {{- fail (printf "cluster.%s is %q: want a value of the form %s, from output cluster_values of the infrastructure repository (the bootstrap sets cluster for platform %s)" $key (toString ($value | default "")) (get $shapes $key) $platform) }}
 {{- end }}
 {{- end }}
-{{- range $key := list "dbCidrs" "s3Cidrs" }}
+{{- range $key := list "dbCidrs" "edgeCidrs" "s3Cidrs" }}
 {{- $value := get $cluster $key }}
 {{- if not (and (kindIs "slice" $value) $value) }}
 {{- fail (printf "cluster.%s is not set: want a list of CIDRs, from output cluster_values of the infrastructure repository (the bootstrap sets cluster for platform %s)" $key $platform) }}
@@ -363,10 +362,10 @@ spec:
         pod-security.kubernetes.io/audit: restricted
         pod-security.kubernetes.io/audit-version: {{ $podSecurityVersion }}
         {{- if and (eq $platform "eks") (eq .name "envoy-gateway") }}
-        # The NLB sends to the Envoy pods' addresses (target type ip). With this label the pod webhook of AWS Load
-        # Balancer Controller gives each new Envoy pod a readiness gate that holds until the NLB reports its target
-        # healthy; without it the old pod is deregistered while the new target is still in its first health checks, and
-        # the entry point refuses connections. The webhook (failurePolicy Ignore) gates only pods of a target group.
+        # The ALB's target group sends to the Envoy pods' addresses (target type ip). With this label the pod webhook
+        # of AWS Load Balancer Controller gives each new Envoy pod a readiness gate that holds until the target group
+        # reports it healthy; without it the old pod is deregistered while the new one is still in its first health
+        # checks, and the entry point refuses requests. The webhook (failurePolicy Ignore) gates only target group pods.
         elbv2.k8s.aws/pod-readiness-gate-inject: enabled
         {{- end }}
     {{- end }}
