@@ -1,14 +1,15 @@
 # AWS Load Balancer Controller v3.6.2 (chart https://aws.github.io/eks-charts aws-load-balancer-controller 3.6.2),
-# release aws-load-balancer-controller in namespace kube-system, wave 1 of argocd/apps/components.json, on platform eks
-# only. It makes the internet-facing NLB in front of Envoy from the Service of EnvoyProxy svp (chart svp-cluster).
+# release aws-load-balancer-controller in namespace kube-system, wave 1, on platform eks only. It makes no load
+# balancer: it puts the Envoy pods in the internal ALB's target group (Terraform's) by TargetGroupBinding svp-envoy.
 # Design notes: docs/components.md.
 
 # The version is the one whose IAM policy the infrastructure repository gives the controller's role
 # (aws/modules/eks/policies there): a new version comes with that policy, in step.
 
-# Wave 1, beside svp-cluster and not after it: Gateway svp of svp-cluster reports Programmed only once its Service has
-# an address, the NLB's; a later wave would wait for good. Not wave 0: its webhook certificate comes from cert-manager
-# (wave 0), and a component of wave 0 gets Pod Security "restricted", which kube-system's system pods do not meet.
+# Wave 1, beside svp-cluster and not after it: svp-cluster renders the TargetGroupBinding, whose CRD and webhook come
+# with this chart; Argo CD syncs it once they exist (SkipDryRunOnMissingResource and retries). In a later wave, wave 1
+# would lack the CRD and never finish. Not wave 0: its webhook certificate comes from cert-manager (wave 0), and a
+# component of wave 0 gets Pod Security "restricted", which kube-system's system pods do not meet.
 
 # kube-system and ServiceAccount aws-load-balancer-controller are the pair the controller's EKS Pod Identity association
 # names (the infrastructure repository): the pod gets the role's credentials from the Pod Identity agent, never from
@@ -35,9 +36,8 @@ serviceAccount:
 enableCertManager: true
 
 # The Service webhook makes every new Service of type LoadBalancer the controller's (it sets loadBalancerClass), and
-# fails closed: while no replica runs, no Service of that type can be created in the cluster. Envoy's Service names the
-# controller by annotation (type external) instead, which the controller reconciles without the webhook, and which the
-# EKS cloud provider leaves alone.
+# fails closed: while no replica runs, no Service of that type can be created in the cluster. No Service here is of
+# that type (Envoy's is ClusterIP), so it would only add that failure.
 enableServiceMutatorWebhook: false
 
 # No Ingress runs here: no IngressClass alb, no IngressClassParams (both cluster-scoped).

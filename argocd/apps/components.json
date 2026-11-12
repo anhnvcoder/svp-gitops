@@ -103,18 +103,6 @@
       "values": "base/keda.yaml"
     },
     {
-      "name": "external-dns",
-      "namespace": "external-dns",
-      "wave": 2,
-      "repo": "https://kubernetes-sigs.github.io/external-dns/",
-      "chart": "external-dns",
-      "version": "1.23.0",
-      "values": "base/external-dns.yaml",
-      "platforms": [
-        "eks"
-      ]
-    },
-    {
       "name": "argo-rollouts",
       "namespace": "argo-rollouts",
       "wave": 2,

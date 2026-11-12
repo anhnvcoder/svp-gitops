@@ -28,9 +28,8 @@ spec:
     - https://argoproj.github.io/argo-helm
     - https://kyverno.github.io/kyverno/
     - https://charts.external-secrets.io
-    # Platform eks only: AWS Load Balancer Controller, ExternalDNS, Karpenter.
+    # Platform eks only: AWS Load Balancer Controller, Karpenter.
     - https://aws.github.io/eks-charts
-    - https://kubernetes-sigs.github.io/external-dns/
     - public.ecr.aws/karpenter
   # The project's namespaces and those of the platform charts, on this cluster only. kube-system only because KEDA's
   # chart puts RoleBinding keda-operator-auth-reader there, bound to a Role that exists in kube-system alone (without it
@@ -51,12 +50,11 @@ spec:
     - {server: https://kubernetes.default.svc, namespace: kube-system}
     - {server: https://kubernetes.default.svc, namespace: external-secrets}
     - {server: https://kubernetes.default.svc, namespace: svp-secrets}
-    - {server: https://kubernetes.default.svc, namespace: external-dns}
     - {server: https://kubernetes.default.svc, namespace: reloader}
   # Cluster-scoped kinds the charts render (helm template of every component with its values, on each platform), nothing
   # else: no PersistentVolume, PriorityClass, IngressClass, node or admission policy of another kind. Namespaced kinds
   # are not listed: every one is allowed in the namespaces above. Reloader, which watches the project's namespaces only,
-  # renders none; AWS Load Balancer Controller and ExternalDNS (platform eks) need none beyond CRDs, RBAC and webhooks.
+  # renders none; AWS Load Balancer Controller (platform eks) needs none beyond CRDs, RBAC and webhooks.
   clusterResourceWhitelist:
     - {group: "", kind: Namespace}
     - {group: apiextensions.k8s.io, kind: CustomResourceDefinition}
@@ -72,7 +70,7 @@ spec:
     - {group: admissionregistration.k8s.io, kind: ValidatingAdmissionPolicyBinding}
     # KEDA's external metrics API.
     - {group: apiregistration.k8s.io, kind: APIService}
-    # Chart svp-cluster: the cluster CA's issuers (on platform eks Let's Encrypt's) and Envoy Gateway's GatewayClass.
+    # Chart svp-cluster: the cluster CA's issuers and Envoy Gateway's GatewayClass.
     - {group: cert-manager.io, kind: ClusterIssuer}
     - {group: gateway.networking.k8s.io, kind: GatewayClass}
     # Chart svp-cluster on platform eks: StorageClass gp3, the cluster's default class (EBS volumes). No other chart

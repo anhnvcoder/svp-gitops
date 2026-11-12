@@ -1,7 +1,7 @@
-# Platform eks: Postgres on Amazon RDS and objects on Amazon S3 (no CloudNativePG, no object store in the cluster), the
-# EBS volumes of StorageClass gp3 as the default class, certificates from Let's Encrypt (DNS-01 on Route 53), an
-# internet-facing NLB of AWS Load Balancer Controller in front of Envoy, the API server on 443. What depends on the
-# cluster (its VPC, service range, names, zone) comes from svp-cluster.values.tpl beside this file.
+# Platform eks: Postgres on RDS and objects on S3 (no CloudNativePG, no in-cluster object store), gp3 as the default
+# StorageClass, Envoy behind the internal ALB CloudFront reaches via a VPC origin (ALB, listener and target group are
+# Terraform's), certificates from the cluster's own CA, the API server on 443. What depends on the cluster (VPC, edge
+# subnets, target group, names) comes from svp-cluster.values.tpl beside this file.
 cloudnativePG:
   enabled: false
 s3:
@@ -19,41 +19,33 @@ kyverno:
   vxlanAddresses: []
 
 # The namespaces of the platform charts that run here, made before their chart with Pod Security "restricted": the
-# base's without cnpg-system (no CloudNativePG on EKS), with external-dns (component external-dns). A list replaces the
-# base's whole, so every one is named. AWS Load Balancer Controller runs in kube-system, which this chart never labels.
+# base's without cnpg-system (no CloudNativePG on EKS). A list replaces the base's whole, so every one is named. AWS
+# Load Balancer Controller runs in kube-system, which this chart never labels.
 platformNamespaces:
   - name: argo-rollouts
   - name: keda
   - name: kyverno
   - name: reloader
-  - name: external-dns
 
-# Let's Encrypt production: smoke tests, k6 and browsers trust no staging certificate. The account's email and the
-# zone come from the template.
+# The ALB checks no target's certificate, so Envoy serves one from the cluster's own CA (issuer svp-ca); browsers see
+# the public ACM certificates of CloudFront and the ALB. Nothing in the cluster writes to Route 53.
 tls:
-  issuer: acme
-  acme:
-    server: production
+  issuer: selfSigned
 
 envoy:
   service:
-    # AWS Load Balancer Controller makes an internet-facing NLB for this Service: target type ip (straight to the Envoy
-    # pods' addresses), and the client's address kept, which the gateway's rate limits and logs key on (one trusted
-    # hop, Envoy's).
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: external
-      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
-      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
-      service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true
-      # Envoy's readiness endpoint instead of a TCP connect to 10443: /ready fails as soon as Envoy starts draining, so
-      # the NLB stops sending new connections to a pod that is shutting down.
-      service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: HTTP
-      service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "19003"
-      service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: /ready
-  # The Envoy pods face the internet here: their HTTPS port from everywhere, metrics from svp-obs, the health check port
-  # from the VPC (healthCheckCIDR, from the template).
+    # No load balancer for this Service: the ALB's target group of type ip gets the Envoy pods' addresses through
+    # TargetGroupBinding svp-envoy (targetGroupArn, from the template), which points at this fixed name.
+    type: ClusterIP
+    name: svp-envoy
+  # Only the ALB (from the edge subnets) and the in-cluster load test reach 10443, only the ALB the health check port;
+  # metrics from svp-obs. The sources come from the template.
   networkPolicy:
     enabled: true
+    # The target group's health check: Envoy's /ready, which fails as soon as Envoy starts draining, so the ALB stops
+    # sending new requests to a pod that is shutting down.
+    healthCheck:
+      port: 19003
 
 # The Secrets come from AWS Secrets Manager through External Secrets Operator, entry svp/<env>/<entry>, written by `make
 # eks-secrets`. Each namespace's store assumes a role of its own, allowed GetSecretValue on the entries that namespace

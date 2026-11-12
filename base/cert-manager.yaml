@@ -20,11 +20,10 @@ global:
 
 # Why it stays: the Certificates are in several namespaces and the controller writes each key pair into its
 # Certificate's namespace; v1.21.2 has no namespaced RBAC, and --namespace turns ClusterIssuers off, which
-# svp-selfsigned, svp-ca (lab) and svp-acme (EKS) are.
+# svp-selfsigned and svp-ca are.
 
-# On a lab cluster the ACME rights are unused (its issuers are a local CA); on EKS svp-acme solves DNS-01, which needs
-# none of the HTTP-01 solver's pod, Service, Ingress or HTTPRoute rights either. The chart cannot drop them alone, and
-# with Secrets of every namespace readable that would not change what a stolen token reads.
+# The ACME rights are unused (every issuer is the cluster's own CA). The chart cannot drop them alone, and with
+# Secrets of every namespace readable that would not change what a stolen token reads.
 
 # What limits it instead: no route of Gateway svp leads to its pods, and a pod it creates is held to Pod Security
 # restricted in every namespace that carries the label. A lab cluster defaults namespaces without it to restricted
@@ -46,8 +45,8 @@ cainjector:
   image:
     repository: quay.io/jetstack/cert-manager-cainjector
     tag: v1.21.2@sha256:c85268c64f2e0e76684bf5fe8906caff34b82523561c6affe0fae3546bd87562
-# The ACME HTTP-01 solver image the controller would start pods from (--acme-http01-solver-image); no issuer here
-# solves HTTP-01 (svp-acme on EKS solves DNS-01).
+# The ACME HTTP-01 solver image the controller would start pods from (--acme-http01-solver-image); no issuer here is
+# an ACME one.
 acmesolver:
   image:
     repository: quay.io/jetstack/cert-manager-acmesolver
