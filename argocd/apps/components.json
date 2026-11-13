@@ -108,7 +108,7 @@
       "wave": 2,
       "repo": "https://argoproj.github.io/argo-helm",
       "chart": "argo-rollouts",
-      "version": "2.43.8",
+      "version": "2.43.12",
       "values": "base/argo-rollouts.yaml",
       "archValues": {
         "amd64": "base/argo-rollouts-amd64.yaml"
