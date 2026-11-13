@@ -140,7 +140,8 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   `eks` cả `stg` và `prd`) và `localHosts: true` khi render của nó được nêu tên lab `*.svp.localhost` (chỉ `k3d`; vắng là không được). Root
   chart không đọc khoá này; check của repo code đọc nó (thiếu hay sai dạng là đỏ), job `diff-preview` cũng render theo nó.
 - Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
-  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS). Chỉ `eks`: `karpenter` (node cho workload theo pod đang chờ, wave -1
+  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS), `loki`, `tempo` (log, trace trên EKS vào CloudWatch Logs, X-Ray). Chỉ
+  `eks`: `ack-prometheusservice` (luật và cảnh báo lên AMP), `grafana-operator` (dashboard lên Amazon Managed Grafana), `karpenter` (node cho workload theo pod đang chờ, wave -1
   vì mang CRD của NodePool mà `svp-cluster` render), `aws-load-balancer-controller` (đăng ký pod Envoy vào target group của ALB internal
   qua TargetGroupBinding, wave 1 vì mang CRD của TargetGroupBinding mà `svp-cluster` render). Đường dev (`make k8s-up`) chạy component của
   `k3d`. Không gì trong cluster ghi DNS: bản ghi của env do Terraform của repo hạ tầng tạo.
@@ -156,7 +157,7 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   `cluster.valkeyHost`), không Secret chỉ-k3d của broker và Valkey trong cluster (`externalSecrets.localKafkaValkey: false`), không CA local
   (`localCA: ""` của service không có Postgres, cert của MSK và ElastiCache nối về CA công khai trong root hệ thống), StorageClass `gp3`
   mặc định của
-  `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Loki, Prometheus, Tempo, Pyroscope, Envoy sau ALB internal (CloudFront tới
+  `svp-cluster` và `gp3` thay `local-path` mà `base/` ghim ở Prometheus, Pyroscope, Envoy sau ALB internal (CloudFront tới
   ALB qua VPC origin; ALB, listener, target group do Terraform tạo): Service `svp-envoy` kiểu `ClusterIP` với TargetGroupBinding
   `svp-envoy`, Gateway `svp` một listener `https` không hostname (ALB không gửi SNI tới target) với Secret `svp-edge-tls` do issuer CA
   riêng `svp-ca` ký cho `<domain>` và `api.<domain>` (ALB không kiểm cert target; trình duyệt thấy cert ACM), HTTPRoute `web` gắn
@@ -167,7 +168,12 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   của ALB thấy nó khoẻ, nên rollout Envoy không làm cổng vào từ chối request), API server cổng 443, egress theo địa chỉ
   (`externalPeers` của `svp-service`: subnet database cổng 5432
   tới RDS, 9096 tới MSK, 6379 tới ElastiCache, dải S3 của region cổng 443, agent Pod Identity `169.254.170.23` cổng 80; Collector, Job init
-  và `svp-ops` tới MSK, ElastiCache theo cùng CIDR), Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
+  và `svp-ops` tới MSK, ElastiCache theo cùng CIDR), image qua ECR của account (`svp-policy.values.tpl`: policy `svp-registry-mirror` đổi
+  image của mọi pod, `svp-images` đọc chữ ký ở ECR, Kyverno đăng nhập bằng Pod Identity), telemetry vào dịch vụ managed của account
+  (Prometheus chế độ agent ghi vào AMP, Collector gửi log tới CloudWatch Logs và trace tới X-Ray bằng file đích `k8s-eks.yaml`, luật và
+  cảnh báo lên AMP qua ACK rồi tới SNS, dashboard lên Amazon Managed Grafana qua Grafana Operator, canary hỏi AMP bằng SigV4; sơ đồ ở
+  [`docs/components.md`](docs/components.md#telemetry-trên-eks)), NetworkPolicy tới endpoint interface trong VPC (`awsEndpointCidrs` là
+  `cluster.vpcCidr`), Argo CD tự cài như `base/` cộng ApplicationSet controller và Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
   `svp-root` (nhãn `svp.io/notify=root` do bootstrap gắn) ghi commit status `argocd/<env>` lên commit của repo này bằng GitHub App
   `svp-argocd-notifier`, Secret qua External Secrets (`externalSecrets.argocdNotifications` của `svp-cluster.yaml`); Telegram khi sync lỗi
   hay Degraded chỉ khi bootstrap gắn chat (annotation `svp.io/telegram-chat-id` của Secret cluster), chat không vào repo.
@@ -187,10 +193,10 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 
 | Khoá | Dạng | Ai dùng (mẫu ở `platforms/eks/`) |
 | --- | --- | --- |
-| `name` | tên cluster EKS | `clusterName` của `aws-load-balancer-controller`, `settings.clusterName` và hàng đợi `settings.interruptionQueue` (`<name>-karpenter`) của `karpenter`, `karpenter.clusterName` (role node, tag discovery) của `svp-cluster` |
-| `region` | region AWS | `region` của LBC, `AWS_REGION` của `karpenter`, `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
+| `name` | tên cluster EKS | nhãn ngoài `cluster` của Prometheus agent (`kube-prometheus-stack`), `clusterName` của `aws-load-balancer-controller`, `settings.clusterName` và hàng đợi `settings.interruptionQueue` (`<name>-karpenter`) của `karpenter`, `karpenter.clusterName` (role node, tag discovery) của `svp-cluster` |
+| `region` | region AWS | SigV4 của remote write (`kube-prometheus-stack`), `rules.amp.region`, `dashboards.grafana.region` của `svp-observability`, `sigv4Region` của `canaryPrometheus` (`gateway`, `web`), `SVP_OTELCOL_REGION` của `otel-collector`, `region` của LBC, `AWS_REGION` của `karpenter`, `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
 | `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
-| `vpcCidr` | CIDR | `nodeSubnet` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `TRUSTED_PROXY_CIDRS` của `gateway` |
+| `vpcCidr` | CIDR | `nodeSubnet` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `awsEndpointCidrs` của `svp-cluster`, `svp-observability` (NetworkPolicy tới endpoint interface), `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
 | `dbCidrs` | danh sách CIDR | `postgres.external.cidrs`, `kafka.external.cidrs`, `valkey.external.cidrs` của `svp-data`, `postgres.external.cidrs`, `kafka.external.cidrs` của `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service`, `externalPeers.kafka` (cổng 9096) của bốn service đó cùng `media-worker`, `externalPeers.valkey` (cổng 6379) của `gateway`, `feed-service`, `web` |
 | `domain` | tên miền | `dnsNames` `<domain>`, `api.<domain>` của listener `https` và `apexHost`, `wildcardHost` `*.<domain>` (chỉ chart chưa có `listeners` đọc) của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web` |
@@ -203,6 +209,12 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `kafkaBrokers` | chuỗi `host:9096,host:9096,…`, một mục mỗi broker, không khoảng trắng (bootstrap SCRAM của MSK) | `KAFKA_BROKERS` của `user-service`, `video-service`, `engagement-service`, `feed-service`, `media-worker`; `kafka.brokers` của `svp-data` (Job `kafka-init`, `svp-ops`); `SVP_OTELCOL_KAFKA_BROKERS` của `otel-collector` |
 | `valkeyHost` | tên miền, không cổng (primary endpoint của ElastiCache) | `externalSecrets.valkey` (`<valkeyHost>:6379`, host của `REDIS_URL`) của `svp-cluster`; `valkey.host` của `svp-data` (`svp-ops`) |
 | `s3Cidrs` | danh sách CIDR | `externalPeers.s3` (cổng 443, cùng agent Pod Identity) của `video-service`, `media-worker` |
+| `ecrRegistry` | host registry ECR (`<account>.dkr.ecr.<region>.amazonaws.com`) | `registryMirror.rules` (đích của sáu tiền tố) và `releaseRegistry` của `svp-policy` |
+| `ampWorkspaceId` | `ws-…` | `rules.amp.workspaceId` của `svp-observability` (workspace mà ACK ghi luật vào) |
+| `ampEndpoint` | `https://aps-workspaces.<region>.amazonaws.com/workspaces/ws-…/`, có `/` cuối | URL remote write của `kube-prometheus-stack` (cộng `api/v1/remote_write`), `SVP_OTELCOL_AMP_ENDPOINT` của `otel-collector`, `dashboards.grafana.ampEndpoint` của `svp-observability`, `address` của `canaryPrometheus` (`gateway`, `web`; bỏ `/` cuối) |
+| `logGroup` | `/svp/<env>/otel` | `SVP_OTELCOL_LOG_GROUP` của `otel-collector` |
+| `grafanaUrl` | `https://g-….grafana-workspace.<region>.amazonaws.com`, không `/` cuối | `dashboards.grafana.url` của `svp-observability` (CR `Grafana` của Grafana Operator) |
+| `alarmTopicArn` | ARN topic SNS `svp-<env>-alarms` | `rules.amp.alarmTopicArn` của `svp-observability` (đích của `AlertManagerDefinition`) |
 | `externalSecretsRoles` | map đúng năm namespace `svp`, `svp-data`, `svp-obs`, `keda`, `argocd` → ARN role IAM | `externalSecrets.aws.roles` của `svp-cluster`: role SecretStore của từng namespace (thiếu namespace thì render dừng) |
 
 Thêm khoá thì sửa cả bốn nơi: output `cluster_values` của `svp-infra`, mẫu và phép kiểm khoá của root ở đây (`argocd/apps/templates/applications.yaml`)

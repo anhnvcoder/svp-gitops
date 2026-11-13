@@ -1,5 +1,5 @@
-# Argo CD v3.5.5 (chart https://argoproj.github.io/argo-helm argo-cd 10.10.5), release argocd in namespace argocd: the
-# GitOps path, installed by the bootstrap at the version of argocd/bootstrap.json before everything else (not in
+# Argo CD v3.5.5 (chart https://argoproj.github.io/argo-helm argo-cd, at the version of argocd/bootstrap.json), release
+# argocd in namespace argocd: the GitOps path, installed by the bootstrap before everything else (not in
 # components.json). Logins are the local admin user only; the server is a ClusterIP Service reached only through a
 # port-forward on 127.0.0.1 (threat model OPS-2).
 

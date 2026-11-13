@@ -3,6 +3,10 @@
 {{- $net := splitList "." (first (splitList "/" $c.serviceCidr)) }}
 # The VPC's CIDR: the control plane's network interfaces, where the API server and its webhook calls are.
 nodeSubnet: {{ $c.vpcCidr | quote }}
+# The VPC's CIDR again: the private DNS of the interface endpoints puts the AWS APIs Kyverno and External Secrets call
+# (ECR, STS, Secrets Manager) there.
+awsEndpointCidrs:
+  - {{ $c.vpcCidr | quote }}
 # Service kubernetes: the first address of the cluster's service range (a network address ending in .0, which the
 # root chart checks).
 kubeAPIServiceIP: {{ printf "%s.%s.%s.%d" (index $net 0) (index $net 1) (index $net 2) (add1 (atoi (index $net 3))) | quote }}
@@ -46,6 +50,9 @@ envoy:
 # namespace without a role fails here, before Argo CD gets a store that cannot authenticate.
 externalSecrets:
   prefix: {{ printf "svp/%s/" .Values.env | quote }}
+  # Secret svp-obs/grafana-operator: the API token of Amazon Managed Grafana, which the session's bootstrap writes to
+  # entry grafana-operator.
+  grafanaOperator: true
   # The RDS instance's own address, the host of every connection string the ExternalSecrets build: sslmode=verify-full
   # checks the server's certificate against the host called, and RDS's certificate holds only that name.
   postgres: {{ printf "%s:5432" $c.rdsAddress | quote }}

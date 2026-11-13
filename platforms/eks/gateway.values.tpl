@@ -17,3 +17,8 @@ externalPeers:
   {{- range .Values.cluster.dbCidrs }}
     - {cidr: {{ . | quote }}, ports: [6379]}
   {{- end }}
+# The canary's analysis asks the env's AMP workspace (no Prometheus answers queries in the cluster: the agent only
+# writes), signed with SigV4 by Argo Rollouts' EKS Pod Identity.
+canaryPrometheus:
+  address: {{ trimSuffix "/" .Values.cluster.ampEndpoint | quote }}
+  sigv4Region: {{ .Values.cluster.region | quote }}

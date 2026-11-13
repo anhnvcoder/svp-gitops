@@ -1,7 +1,7 @@
 # OpenTelemetry Collector contrib 0.162.0 (chart https://open-telemetry.github.io/opentelemetry-helm-charts
 # opentelemetry-collector 0.176.0), release otel-collector in namespace svp-obs, wave 6 of argocd/apps/components.json.
 # The six Go services and the web client send OTLP/gRPC to otel-collector.svp-obs:4317; the Collector scrubs and
-# forwards to Prometheus, Loki and Tempo.
+# forwards to the platform's backends: Prometheus, Loki and Tempo on k3d, AWS's managed services on eks.
 
 # Design notes: docs/components.md.
 
@@ -19,12 +19,12 @@ image:
 command:
   name: otelcol-contrib
 
-# The config is deploy/observability/otelcol/k8s-config.yaml, which chart svp-observability (wave 5) puts in ConfigMap
-# otel-collector-config under the key relay. Not the chart's own `config:`: it is deep-merged with the chart's defaults
-# (Jaeger, Zipkin and Prometheus receivers, a debug exporter), so the running config would not be the file.
+# The config is deploy/observability/otelcol/k8s-config.yaml merged with the platform's k8s-<platform>.yaml, which
+# chart svp-observability (wave 5) puts in ConfigMap otel-collector-config under the key relay. Not the chart's own
+# `config:`: it is deep-merged with the chart's defaults (Jaeger, Zipkin and Prometheus receivers, a debug exporter).
 
 # Without the chart's checksum annotation nothing rolls the pod when the ConfigMap changes: deploy/k8s/install.sh passes
-# the file's checksum as a pod annotation.
+# the files' checksum as a pod annotation.
 configMap:
   create: false
   existingName: otel-collector-config

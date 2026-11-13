@@ -1,0 +1,31 @@
+# ACK controller for Amazon Managed Service for Prometheus 1.10.0 (chart public.ecr.aws/aws-controllers-k8s
+# prometheusservice-chart), release ack-prometheusservice in svp-obs, platform eks only: it turns the
+# RuleGroupsNamespaces and AlertManagerDefinition of chart svp-observability into the AMP workspace's rules and alerts.
+# Design notes: docs/components.md.
+
+# By digest, the chart's tag beside it: the chart renders repository:tag, so tag holds version@digest. repository stays
+# the chart's default, out of this file, so that only the "# renovate:" line below names the image for Renovate.
+image:
+  # renovate: datasource=docker depName=public.ecr.aws/aws-controllers-k8s/prometheusservice-controller
+  tag: 1.10.0@sha256:f059306120e55153dfa3c8aab23f4ce10ac276cabf763baff9df1eabd58f6902
+
+# The ServiceAccount the EKS Pod Identity association of the infrastructure repository names, written out so that a new
+# chart default cannot leave the controller without credentials.
+serviceAccount:
+  create: true
+  name: ack-prometheusservice-controller
+
+# Its own namespace only: a Role in svp-obs, where the custom resources are, instead of a ClusterRole that reads every
+# ConfigMap and Secret of the cluster. And only the two kinds chart svp-observability renders: the workspace itself is
+# Terraform's, which no CR here may change or delete.
+installScope: namespace
+watchNamespace: svp-obs
+reconcile:
+  resources:
+    - AlertManagerDefinition
+    - RuleGroupsNamespace
+
+deployment:
+  # Its watches go through the API server: allow-kube-api of chart svp-cluster opens that egress for this label only.
+  labels:
+    svp-kube-api: allow

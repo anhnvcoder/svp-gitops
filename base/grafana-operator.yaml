@@ -1,0 +1,28 @@
+# Grafana Operator v5.25.0 (chart https://grafana.github.io/helm-charts grafana-operator), release grafana-operator in
+# svp-obs, platform eks only: it writes the data sources and dashboards of chart svp-observability (Grafana's URL in its
+# Grafana resource) into the env's Amazon Managed Grafana over its API, with the token of Secret grafana-operator.
+# Design notes: docs/components.md.
+
+# By digest, the chart's tag beside it (the chart renders registry/repository:tag). registry and repository stay the
+# chart's defaults, out of this file, so that only the "# renovate:" line below names the image for Renovate.
+image:
+  # renovate: datasource=docker depName=ghcr.io/grafana/grafana-operator
+  tag: v5.25.0@sha256:bc572995823fcfc32d2e960a47324a87baae8e4c9f821b8564026243e73624f3
+
+# Its own namespace only, with a Role there: the chart's default ClusterRole reads and writes Secrets and ConfigMaps
+# in every namespace.
+namespaceScope: true
+rbac:
+  useClusterRole: false
+
+# Pod Security "restricted" (the namespace rejects pods that do not meet it): the chart sets every field of the
+# container but the pod's seccomp profile.
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+podLabels:
+  # Its watches and leader lease go through the API server: allow-kube-api of chart svp-cluster opens that egress.
+  svp-kube-api: allow
+resources:
+  requests: {cpu: 10m, memory: 64Mi}
+  limits: {memory: 256Mi}
