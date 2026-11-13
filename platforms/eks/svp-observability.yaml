@@ -5,3 +5,19 @@ postgres:
   mode: external
 kafka:
   mode: external
+
+# Telemetry, rules and dashboards go to the env's managed services, which keep them past a destroy: the Collector's
+# destination file k8s-eks.yaml (no backend in the cluster), the rules to the AMP workspace through ACK's controller
+# (component ack-prometheusservice), the dashboards to Amazon Managed Grafana through Grafana Operator (component
+# grafana-operator). Workspace, topic, Grafana and endpoints come from svp-observability.values.tpl.
+collector:
+  destinations: eks
+  backends: []
+  podMonitor: true
+rules:
+  target: amp
+dashboards:
+  target: grafana-operator
+# Prometheus runs in agent mode (platforms/eks/kube-prometheus-stack.yaml): the operator's pods of a PrometheusAgent.
+pods:
+  prometheus: {app.kubernetes.io/name: prometheus-agent, app.kubernetes.io/instance: kps-prometheus}

@@ -1,7 +1,40 @@
-# Platform eks: Prometheus' volume on StorageClass gp3 (EBS, chart svp-cluster) instead of k3s's local-path, which
-# base/ names. Alertmanager has no volume (base/).
+# Platform eks: Prometheus in agent mode, which scrapes the ServiceMonitors and PodMonitors and remote-writes to the
+# env's Amazon Managed Service for Prometheus workspace; the workspace keeps the data past a destroy, evaluates the
+# rules (chart svp-observability) and sends the alerts. Workspace and region: kube-prometheus-stack.values.tpl.
+# Design notes: docs/components.md.
+
+# An agent evaluates no rule and sends no alert; the stack's own Grafana gives way to Amazon Managed Grafana.
+defaultRules:
+  create: false
+alertmanager:
+  enabled: false
+grafana:
+  enabled: false
+
 prometheus:
+  agentMode: true
+  # One replica down at a time, so a drain never stops both.
+  podDisruptionBudget:
+    enabled: true
   prometheusSpec:
+    # Two replicas over the zones, both sending the same series: the workspace keeps label cluster, drops __replica__
+    # and takes one replica's samples, switching to the other after 30 s without them. The operator's constant label
+    # prometheus would only add a series per value.
+    replicas: 2
+    replicaExternalLabelName: __replica__
+    prometheusExternalLabelNameClear: true
+    # Nothing writes to the agent here: the Collector sends its metrics to the workspace itself, and no Tempo runs.
+    enableOTLPReceiver: false
+    enableRemoteWriteReceiver: false
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: prometheus-agent
+            app.kubernetes.io/instance: kps-prometheus
+    # The write-ahead log on StorageClass gp3 (EBS, chart svp-cluster) instead of k3s's local-path, which base/ names.
     storageSpec:
       volumeClaimTemplate:
         spec:

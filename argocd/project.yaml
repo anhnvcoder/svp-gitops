@@ -11,8 +11,8 @@ spec:
   description: Short-video platform on a lab k3d cluster or on Amazon EKS
   # This repository and the code repository (its charts, read only at the commit envs/<env>/charts.yaml pins), over
   # HTTPS without credentials as repoURL and chartRepoURL of argocd/apps/values.yaml name them, and the chart
-  # repositories of components.json, nothing else. docker.io/envoyproxy (Envoy Gateway), ghcr.io/stakater/charts
-  # (Reloader) and public.ecr.aws/karpenter are OCI repositories, written without the scheme as Argo CD takes them.
+  # repositories of components.json, nothing else. The OCI repositories (docker.io/envoyproxy, ghcr.io/stakater/charts,
+  # public.ecr.aws/...) are written without the scheme as Argo CD takes them.
   sourceRepos:
     - https://github.com/anhnvcoder/svp-gitops.git
     - https://github.com/anhnvcoder/svp-backend.git
@@ -28,9 +28,11 @@ spec:
     - https://argoproj.github.io/argo-helm
     - https://kyverno.github.io/kyverno/
     - https://charts.external-secrets.io
-    # Platform eks only: AWS Load Balancer Controller, Karpenter.
+    # Platform eks only: AWS Load Balancer Controller, Karpenter, ACK's controller for Amazon Managed Service for
+    # Prometheus (Grafana Operator's chart is in grafana.github.io above).
     - https://aws.github.io/eks-charts
     - public.ecr.aws/karpenter
+    - public.ecr.aws/aws-controllers-k8s
   # The project's namespaces and those of the platform charts, on this cluster only. kube-system only because KEDA's
   # chart puts RoleBinding keda-operator-auth-reader there, bound to a Role that exists in kube-system alone (without it
   # Application keda never syncs), and on platform eks for AWS Load Balancer Controller and Karpenter. svp-secrets holds
@@ -82,9 +84,11 @@ spec:
     - {group: karpenter.k8s.aws, kind: EC2NodeClass}
     # Chart svp-data: KEDA's login to Kafka, read from Secret keda/keda-kafka.
     - {group: keda.sh, kind: ClusterTriggerAuthentication}
-    # Chart svp-policy: the image policy of namespace svp. Kyverno's own chart needs no kind beyond the CRDs and RBAC
-    # above; the webhook configurations it registers at run time are its own, not Argo CD's.
+    # Chart svp-policy: the image policy of namespace svp and, on platform eks, svp-registry-mirror, which points every
+    # pod's images at the account's ECR registry. Kyverno's own chart needs no kind beyond the CRDs and RBAC above; the
+    # webhook configurations it registers at run time are its own, not Argo CD's.
     - {group: policies.kyverno.io, kind: ImageValidatingPolicy}
+    - {group: policies.kyverno.io, kind: MutatingPolicy}
 ---
 # AppProject default: argocd-server creates it at its start when it is missing, open to every repository, destination
 # and kind, and an Application that names it (or names no project) would escape every limit of svp above. Emptied, it

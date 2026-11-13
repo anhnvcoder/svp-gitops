@@ -22,11 +22,14 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [Kyverno](#kyverno)
 - [KEDA](#keda)
 - [kube-prometheus-stack](#kube-prometheus-stack)
+- [ACK prometheusservice controller](#ack-prometheusservice-controller)
+- [Grafana Operator](#grafana-operator)
 - [Barman Cloud plugin](#barman-cloud-plugin)
 - [Loki](#loki)
 - [Tempo](#tempo)
 - [svp-data](#svp-data)
 - [OpenTelemetry Collector](#opentelemetry-collector)
+- [Telemetry trên EKS](#telemetry-trên-eks)
 
 ## Ghim image theo digest
 
@@ -51,6 +54,11 @@ Bản cài tối giản: chỉ application controller, repo-server, server và R
 
 ApplicationSet controller: chart không có công tắc bỏ nó, nên zero replica để Deployment của nó không có pod. Một `components.json` đã liệt
 kê mọi Application. Nền tảng `eks` bật nó (`platforms/eks/argo-cd.yaml`) cho ApplicationSet duy nhất của GitOps Bridge, cái tạo root.
+
+Trên `eks` Argo CD cũng là bản tự cài này: mỗi thành phần một replica, đăng nhập bằng user admin cục bộ. Hướng đi cho prd (EKS Capability
+cho Argo CD: AWS chạy và giữ HA, đăng nhập qua IAM Identity Center, không tài khoản cục bộ) và lý do nằm ở
+[ADR-0065](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0065-argocd-eks-capability.md) của repo code; nó đổi cách cài và
+đích của Application, nên không phải values ở đây.
 
 ### Server-side diff
 
@@ -634,6 +642,15 @@ Một controller bị chiếm giữ gì:
   stable), tạo và xoá Service (chỉ experiment), ghi trên Ingress, ClusterAnalysisTemplate (controller theo namespace không watch chúng) và
   mọi traffic provider ngoài HTTPRoute `api` và `web`.
 
+### Canary trên EKS
+
+Trên `eks` không Prometheus nào trả lời truy vấn trong cluster (chế độ agent chỉ ghi), nên AnalysisTemplate của gateway và web client hỏi
+workspace AMP của env: `canaryPrometheus` ở `platforms/eks/gateway.values.tpl` và `web.values.tpl` đặt `address` là `cluster.ampEndpoint` bỏ
+`/` cuối và `sigv4Region` là `cluster.region`; provider `prometheus` khi đó ký SigV4. Controller gọi AMP bằng EKS Pod Identity của nó
+(ServiceAccount `argo-rollouts`, chỉ `aps:QueryMetrics`). k3d giữ
+`kps-prometheus.svp-obs:9090`. Chart `svp-service` cũ hơn không có `canaryPrometheus` (bản có schema chặt từ chối nó, bản khác bỏ qua và
+vẫn hỏi `kps-prometheus`, nên canary Inconclusive): `envs/<env>/charts.yaml` phải ghim bản chart có giá trị này.
+
 ### Nâng cấp
 
 Render chart mới với các value này, so luật controller trong Role `argo-rollouts` (namespace `argo-rollouts`) với bản render cũ, kiểm
@@ -674,8 +691,8 @@ mọi pod của `svp` (wave 7).
 
 Mọi pod của chart đạt Pod Security `restricted` (non-root uid 65534, root filesystem chỉ đọc, drop ALL, seccomp `RuntimeDefault`, không host
 namespace, chỉ volume `emptyDir` và projected token), mà namespace `kyverno` áp: chart `svp-cluster` (wave 1) tạo nó với nhãn đó và
-NetworkPolicy của nó (default-deny; DNS; API server; lời gọi webhook từ API server; TCP 443 tới địa chỉ public thôi, cho GHCR và TUF của
-Sigstore). Request và limit giữ của chart: admission controller 100m/128Mi, limit 384Mi; reports controller 100m/64Mi, limit 128Mi.
+NetworkPolicy của nó (default-deny; DNS; API server; lời gọi webhook từ API server; TCP 443 tới địa chỉ public, cho GHCR và TUF của
+Sigstore, và trên `eks` thêm tới CIDR của VPC, nơi private DNS của các endpoint interface đặt API của ECR và STS). Request và limit giữ của chart: admission controller 100m/128Mi, limit 384Mi; reports controller 100m/64Mi, limit 128Mi.
 
 ### HA trên EKS
 
@@ -684,6 +701,25 @@ Trên `eks`, `platforms/eks/kyverno.yaml` chạy admission controller 3 replica,
 `ScheduleAnyway`), trước anti-affinity ưu tiên theo hostname của chart. Webhook của policy fail-closed cho `svp`, nên mất node hay zone của một
 replica duy nhất là dừng mọi pod mới ở đó (mục dưới). Reports controller giữ một replica: nó không nằm trên đường admission. k3d giữ một replica
 của `base/` (máy 16 GB).
+
+### Image qua ECR trên EKS
+
+Trên `eks`, mọi image mà pod kéo đi qua registry ECR của account (`cluster.ecrRegistry`); `platforms/eks/svp-policy.values.tpl` đặt ba giá trị
+của chart `svp-policy`:
+
+- `registryMirror.rules`: policy `svp-registry-mirror` (`MutatingPolicy`) đổi image của mọi container của mọi Pod lúc CREATE, trừ namespace
+  `kyverno`, theo tiền tố dài nhất trước. `ghcr.io/anhnvcoder/` về repo cùng tên (image phát hành); `ghcr.io/`, `docker.io/`, `quay.io/`,
+  `registry.k8s.io/`, `public.ecr.aws/` về tiền tố pull-through cache `ghcr/`, `docker-hub/`, `quay/`, `k8s/`, `ecr-public/`. Webhook của nó
+  `failurePolicy: Ignore`: Kyverno down thì pod kéo thẳng upstream qua NAT, còn namespace `svp` vẫn bị `svp-images` chặn (mục dưới).
+  k3d để `rules` rỗng: chart không render policy này.
+- `releaseRegistry`: `svp-images` khớp image phát hành ở ECR thay GHCR; chữ ký và attestation đọc ở chính ECR (CI chép chúng cùng digest), với
+  identity của nguồn không đổi. `sources.json` của chart vẫn nêu GHCR, nên CI, promote và script đọc nó như cũ.
+- `registryCredentials.providers: [amazon]`: admission controller đăng nhập ECR bằng EKS Pod Identity của nó (ServiceAccount
+  `kyverno-admission-controller`, chỉ đọc repo phát hành).
+
+Pull-through cache không kéo được image theo digest chưa có trong cache, nên mỗi buổi script làm nóng cache (`aws/scripts/ecr-warm.sh` của repo
+hạ tầng) kéo theo tag mọi image bên thứ ba trước khi Argo CD bootstrap. Tên pod trên node là tên đã đổi; digest ghim trong values vẫn là digest
+của upstream, nên `pin_check` và Renovate không đổi.
 
 ### Kyverno down
 
@@ -759,9 +795,10 @@ của chart.
 
 kube-prometheus-stack (chart của `prometheus-community.github.io/helm-charts`), release `kube-prometheus-stack` ở namespace `svp-obs`, wave 3
 của `argocd/apps/components.json` (sau Reloader, wave 2): Prometheus operator và CRD của nó, Prometheus, Alertmanager, Grafana và
-kube-state-metrics. Prometheus thế chỗ cái nằm trong `grafana/otel-lgtm` của compose, dựng cùng cách (`deploy/observability/prometheus/prometheus.yaml`),
+kube-state-metrics. Trên k3d, Prometheus thế chỗ cái nằm trong `grafana/otel-lgtm` của compose, dựng cùng cách (`deploy/observability/prometheus/prometheus.yaml`),
 nên dashboard, rule và test `promtool` của compose chạy không đổi. Rule, dashboard và datasource Grafana của dự án ngoài Prometheus và
-Alertmanager đến từ chart `svp-observability` (wave 5), NetworkPolicy của `svp-obs` cũng vậy.
+Alertmanager đến từ chart `svp-observability` (wave 5), NetworkPolicy của `svp-obs` cũng vậy. Trên `eks` cùng chart chạy Prometheus ở chế độ
+agent, còn Alertmanager, Grafana và luật nằm ở dịch vụ managed ([Prometheus agent trên EKS](#prometheus-agent-trên-eks)).
 
 ### Operator chỉ watch `svp-obs`
 
@@ -811,7 +848,7 @@ không dời `version`. Thay vào đó dòng `# renovate:` nêu image (`registry
 
 ### Prometheus
 
-Như compose (`deploy/observability/prometheus/prometheus.yaml` và dòng lệnh của `run-prometheus.sh` của image): receiver OTLP mà mọi metric
+Phần này của k3d (trên `eks` xem [Prometheus agent trên EKS](#prometheus-agent-trên-eks)). Như compose (`deploy/observability/prometheus/prometheus.yaml` và dòng lệnh của `run-prometheus.sh` của image): receiver OTLP mà mọi metric
 đi qua (Collector, và telemetry của chính Collector), các resource attribute được nâng thành label, các cái định danh được giữ, sample
 out-of-order trong 10 phút, native histogram, exemplar. Cùng tên metric và label như compose, nên dashboard và rule không cần đổi.
 
@@ -822,12 +859,58 @@ nó (như `envoy-svp` làm cho `envoy-gateway-system`). Với `true`, chart ch�
 
 ### Alertmanager
 
-Định tuyến của compose (`severity=page` tới Telegram khi `.env` có bot, mọi cái khác chỉ ở UI), từ Secret `alertmanager-svp`, mà
+Phần này của k3d (trên `eks` Alertmanager của AMP, xem [Telemetry trên EKS](#telemetry-trên-eks)). Định tuyến của compose (`severity=page` tới Telegram khi `.env` có bot, mọi cái khác chỉ ở UI), từ Secret `alertmanager-svp`, mà
 `deploy/k8s/secrets.sh` ghi từ `.env` trước khi chart này được cài (khoá `alertmanager.yaml`; operator không đọc khoá nào khác, và một
 config không có receiver sẽ bỏ mọi alert). `useExistingSecret` giữ chart khỏi render Secret config của nó bên cạnh. Token của bot không
 bao giờ ở trong config đó: Secret `alertmanager-telegram` (rỗng khi Telegram tắt) được mount ở `/etc/alertmanager/secrets/alertmanager-telegram/`
 và config nêu file (`bot_token_file`). Đường ra khỏi cluster duy nhất là TCP 443 tới địa chỉ public (policy `allow-alertmanager-telegram`
 của chart `svp-observability`).
+
+### Prometheus agent trên EKS
+
+`platforms/eks/kube-prometheus-stack.yaml` đặt `prometheus.agentMode`: operator render `PrometheusAgent` thay `Prometheus`. Agent chỉ scrape
+ServiceMonitor, PodMonitor (kể cả PodMonitor của Collector) và ghi remote write tới workspace Amazon Managed Service for Prometheus (AMP) của
+env; nó không đánh giá luật, không giữ dữ liệu lâu và không nhận truy vấn. Vì vậy `defaultRules.create`, `alertmanager.enabled` và
+`grafana.enabled` đều `false`, và `enableOTLPReceiver`, `enableRemoteWriteReceiver` tắt: không ai ghi vào agent, metric OTLP của service đi
+thẳng từ Collector vào AMP.
+
+- **Hai replica trải zone**, PodDisruptionBudget `minAvailable: 1`. Cả hai gửi cùng series: AMP giữ nhãn `cluster`, bỏ `__replica__`, nhận mẫu
+  của một replica và đổi sang replica kia sau 30 giây không có mẫu (`replicaExternalLabelName: __replica__`). Nhãn `prometheus` của operator
+  bị bỏ (`prometheusExternalLabelNameClear`) vì mỗi giá trị của nó thêm một series.
+- **Remote write** nằm ở `platforms/eks/kube-prometheus-stack.values.tpl`, vì phụ thuộc cluster: URL là `cluster.ampEndpoint` cộng
+  `api/v1/remote_write`, SigV4 với `cluster.region`, native histogram, `queueConfig` theo hướng dẫn của AWS, nhãn ngoài `cluster` bằng
+  `cluster.name`. Credential là EKS Pod Identity của ServiceAccount `kps-prometheus` (chỉ `aps:RemoteWrite`).
+- **Dữ liệu sống qua destroy** ở workspace (mã hoá KMS, retention theo env), không ở volume của agent: WAL trên StorageClass `gp3` chỉ giữ
+  cái chưa gửi kịp.
+
+## ACK prometheusservice controller
+
+ACK controller cho Amazon Managed Service for Prometheus (chart `prometheusservice-chart` của `public.ecr.aws/aws-controllers-k8s`), release
+`ack-prometheusservice` ở `svp-obs`, wave 3, chỉ `eks` (`platforms` của `components.json`). Nó biến hai kind mà chart `svp-observability` render
+thành cấu hình của workspace AMP: `RuleGroupsNamespace` (một mỗi file luật) và `AlertManagerDefinition`. Chính workspace do Terraform tạo
+(sống qua destroy), nên controller không có CR nào cho nó.
+
+- **Quyền hẹp**: `installScope: namespace` (Role ở `svp-obs` thay vì ClusterRole đọc mọi Secret) và chỉ reconcile hai CRD trên. Credential là
+  EKS Pod Identity của ServiceAccount `ack-prometheusservice-controller`, đặt tường minh trong values để một default mới của chart không để
+  controller mất credential (chỉ rule groups namespace, alert manager definition và tag trên workspace).
+- **Wave 3** (trước `svp-observability`, wave 5) để CRD có trước CR. Chart ghim ở `components.json`; image ghim digest, dòng `# renovate:` nêu image
+  (`repository` để mặc định, ngoài file, để chỉ một nơi nêu nó cho Renovate); quy ước ở [Ghim image theo digest](#ghim-image-theo-digest).
+- Project cho phép nguồn `public.ecr.aws/aws-controllers-k8s` ở `argocd/project.yaml`.
+
+## Grafana Operator
+
+Grafana Operator (chart `grafana-operator` của `grafana.github.io/helm-charts`), release `grafana-operator` ở `svp-obs`, wave 3, chỉ `eks`.
+Trên eks Grafana là Amazon Managed Grafana (AMG) của env, ngoài cluster; operator ghi data source và dashboard của chart `svp-observability`
+vào đó qua API của AMG: CR `Grafana` ngoài trỏ `cluster.grafanaUrl`, token từ Secret `grafana-operator` (External Secrets, entry
+`svp/<env>/grafana-operator`; `externalSecrets.grafanaOperator` của `svp-cluster.values.tpl` bật nó). Token của service account AMG hết hạn
+nhanh, nên script buổi tạo token mới mỗi buổi.
+
+- **Quyền hẹp**: `namespaceScope` và Role ở `svp-obs` thay ClusterRole mặc định (đọc, ghi Secret và ConfigMap mọi namespace); pod đạt Pod
+  Security `restricted`.
+- **Dashboard**: cùng JSON như k3d, mỗi cái một `GrafanaDashboard` (`dashboards.target: grafana-operator`); chart bỏ hai panel có data source
+  kiểu `tempo` (không Tempo ở eks). Series `traces_service_graph_*` vẫn có: Collector sinh nó (connector `service_graph`).
+- **Data source**: `prometheus` (AMP, SigV4, plugin `grafana-amazonprometheus-datasource`) và `cloudwatch` (log, span qua Logs Insights). AMG
+  không vào được Pyroscope và GlitchTip trong VPC: hai thứ đó xem bằng port-forward.
 
 ## Barman Cloud plugin
 
@@ -840,7 +923,8 @@ plugin. `make drill-k8s-threats` in ngoại lệ này cùng lý do của nó.
 
 ## Loki
 
-Loki (chart `loki` của `grafana-community.github.io/helm-charts`). Image ghim theo digest, `appVersion` của chart ghi cạnh để người đọc;
+Loki (chart `loki` của `grafana-community.github.io/helm-charts`), chỉ k3d (`platforms` của `components.json`): trên `eks` log vào CloudWatch
+Logs ([Telemetry trên EKS](#telemetry-trên-eks)). Image ghim theo digest, `appVersion` của chart ghi cạnh để người đọc;
 quy ước chung ở [Ghim image theo digest](#ghim-image-theo-digest). Chart render `registry/repository:tag`, nên `tag` giữ `version@digest` (label
 version của nó thành `3.7.8-sha256-<hex>`, một giá trị label hợp lệ); `pin_check` của `deploy/ci/gitops-check.sh` ở repo code báo lỗi với image không có
 digest. Không dùng khoá digest riêng của chart: helm-values manager của Renovate chỉ thấy một pin ở dạng `repository` và `tag` dưới khoá
@@ -850,7 +934,8 @@ chart viết ra.
 ## Tempo
 
 Tempo (chart `tempo` của `grafana-community.github.io/helm-charts`, single binary), release `tempo` ở namespace `svp-obs`, wave 3 của
-`argocd/apps/components.json`. Collector gửi trace qua OTLP/gRPC tới `tempo.svp-obs:4317`; Grafana truy vấn `tempo.svp-obs:3200`.
+`argocd/apps/components.json`, chỉ k3d: trên `eks` trace vào X-Ray ([Telemetry trên EKS](#telemetry-trên-eks)). Collector gửi trace qua
+OTLP/gRPC tới `tempo.svp-obs:4317`; Grafana truy vấn `tempo.svp-obs:3200`.
 
 Image ghim theo digest, `appVersion` của chart ghi cạnh để người đọc; quy ước chung ở [Ghim image theo digest](#ghim-image-theo-digest).
 Chart render `registry/repository:tag` và gỡ digest khỏi label version của nó, nên `tag` giữ `version@digest`. Chart giữ image dưới
@@ -913,7 +998,10 @@ database đến từ `svp-data.values.tpl` (`cluster.kafkaBrokers`, `cluster.val
 
 ## OpenTelemetry Collector
 
-256 MiB như `mem_limit` của compose. `memory_limiter` trong config (`deploy/observability/otelcol/k8s-config.yaml`) từ chối dữ liệu trên
+256 MiB như `mem_limit` của compose. Config là phần chung `deploy/observability/otelcol/k8s-config.yaml` ghép với file đích của nền tảng
+(`k8s-k3d.yaml`: Prometheus, Loki, Tempo trong cluster; `k8s-eks.yaml`: dịch vụ managed của AWS), chart `svp-observability` gộp chúng
+(`collector.destinations`, `platforms/eks/svp-observability.yaml` đặt `eks`) vào một khoá `relay` mà chart của Collector đọc. Nên đổi riêng
+file đích cũng làm pod khởi động lại: `collectorConfigSha256` băm cả ba file. `memory_limiter` trong config từ chối dữ liệu trên
 mọi pipeline từ 144 MiB heap (soft limit của nó: `limit_mib` 192 trừ `spike_limit_mib` 48) và ép GC từ 192 MiB.
 
 - `GOMEMLIMIT` 140 MiB, ngay dưới soft limit, làm runtime Go thu gom mạnh hơn khi bộ nhớ của nó gần tới đó, để rác, mà limiter tính là
@@ -928,6 +1016,49 @@ Lag của consumer group (receiver `kafka_metrics` của config) đọc từ bro
 `/etc/svp-ca`, mode 0440, `fsGroup` của pod). `platforms/eks/` đặt broker của MSK (`cluster.kafkaBrokers`) và file CA rỗng (cert của MSK
 nối về CA công khai trong root hệ thống), bỏ volume của CA; danh sách thay cả danh sách khi ghép, nên mẫu nêu lại mọi biến của `base/`.
 Egress tới broker là NetworkPolicy của chart `svp-observability` (`kafka.mode` `external` và `kafka.external.cidrs` trên `eks`).
+Trên `eks`, `otel-collector.values.tpl` thêm ba biến mà `k8s-eks.yaml` đọc: `SVP_OTELCOL_REGION`, `SVP_OTELCOL_AMP_ENDPOINT` và
+`SVP_OTELCOL_LOG_GROUP` (từ `cluster.region`, `cluster.ampEndpoint`, `cluster.logGroup`), và `platforms/eks/otel-collector.yaml` mở cổng 8888
+cho agent scrape metric nội bộ của Collector.
 Collector đọc Secret `otelcol-kafka` vào biến môi trường chỉ lúc khởi động: annotation `secret.reloader.stakater.com/reload` (giá trị
 `otelcol-kafka`) trên pod template (`podAnnotations`) cho Reloader restart nó khi Secret đổi (xoay mật khẩu `svp-otelcol`), như operator
 KEDA với `keda-kafka`.
+
+## Telemetry trên EKS
+
+Trên `eks` telemetry đi tới dịch vụ managed của account env, nên sống qua `destroy` của buổi (cluster dựng và gỡ theo buổi); k3d giữ Prometheus,
+Loki, Tempo, Alertmanager, Grafana trong cluster như compose. Khác biệt là dữ liệu theo nền tảng (file đích của Collector, `platforms/eks/`),
+không `if` trong chart. Quyết định, lựa chọn đã bỏ và chi phí: [ADR-0063](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0063-managed-observability.md).
+
+```mermaid
+flowchart LR
+  svc["service, web (OTLP)"] --> col["otel-collector (svp-obs)"]
+  col -- "remote write, SigV4" --> amp[("AMP workspace")]
+  col -- "OTLP, SigV4" --> cwl[("CloudWatch Logs /svp/env/otel")]
+  col -- "OTLP, SigV4" --> xray[("X-Ray, Transaction Search")]
+  mon["ServiceMonitor, PodMonitor"] --> agent["Prometheus agent x2"]
+  agent -- "remote write, SigV4" --> amp
+  ack["ACK prometheusservice"] -- "RuleGroupsNamespace, AlertManagerDefinition" --> amp
+  amp -- "page, ticket" --> sns["SNS svp-env-alarms"]
+  go["Grafana Operator"] -- "data source, dashboard" --> amg["Managed Grafana"]
+  amg -- "query" --> amp
+  amg -- "Logs Insights" --> cwl
+  roll["argo-rollouts"] -- "canary query, SigV4" --> amp
+```
+
+- **Metric**: hai đường vào cùng workspace. Collector ghi metric OTLP của service (và `traces_service_graph_*` do connector `service_graph`
+  sinh); agent ghi metric scrape (kube-state-metrics, kubelet, Envoy, Collector). Tên metric và nhãn ra AMP như Prometheus ở k3d, nên luật và
+  dashboard chạy nguyên.
+- **Log, trace**: Collector gửi log vào log group ứng dụng, span tới endpoint OTLP của X-Ray (Transaction Search ghi span vào log group
+  `aws/spans`); xem ở CloudWatch và qua Logs Insights của AMG.
+- **Luật và cảnh báo**: luật của chart (`svp-alerts`, `slo-generated`) thành `RuleGroupsNamespace` trên workspace; `AlertManagerDefinition` gửi
+  cảnh báo `page` và `ticket` tới topic SNS của env, giữ `runbook_url` và `severity`. Nhóm luật upstream của `kube-prometheus-stack` không
+  chuyển lên AMP.
+- **Credential**: mỗi thứ một EKS Pod Identity theo ServiceAccount: `otel-collector`, `kps-prometheus`, `ack-prometheusservice-controller`,
+  `argo-rollouts`; không khoá tĩnh. Pod gọi API AWS qua endpoint interface trong VPC nhờ `awsEndpointCidrs` của NetworkPolicy (eks đặt
+  `cluster.vpcCidr`; mặc định rỗng thì render như cũ).
+- **Giá trị theo cluster** đều từ [hợp đồng giá trị `cluster`](../README.md#hợp-đồng-giá-trị-cluster): `ampWorkspaceId`, `ampEndpoint`,
+  `logGroup`, `grafanaUrl`, `alarmTopicArn`, `region`.
+- **Chart cũ**: chart `svp-observability`, `svp-policy`, `svp-cluster` hay `svp-service` ở bản cũ không có các giá trị mới
+  (`collector.destinations`, `rules.target`, `dashboards.target`, `registryMirror`, `awsEndpointCidrs`, `canaryPrometheus`): schema chặt
+  từ chối chúng, hay chart bỏ qua và telemetry, luật, canary của eks không chạy đúng. Chúng chỉ đúng khi `envs/<env>/charts.yaml` trỏ bản
+  chart có chúng.

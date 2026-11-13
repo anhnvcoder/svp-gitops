@@ -1,4 +1,9 @@
 # Platform eks: the brokers are Amazon MSK's, whose certificate chains to a public CA among the system's roots, so no
-# local CA is mounted. The brokers come from otel-collector.values.tpl beside this file.
+# local CA is mounted. The brokers and the destinations come from otel-collector.values.tpl beside this file.
 extraVolumes: []
 extraVolumeMounts: []
+# The Collector's own metrics, served on 8888 for the Prometheus agent to scrape (PodMonitor otel-collector of chart
+# svp-observability): its internal telemetry cannot sign with SigV4, so it cannot push them to the workspace.
+ports:
+  metrics:
+    enabled: true

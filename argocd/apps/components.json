@@ -157,7 +157,10 @@
       "repo": "https://grafana-community.github.io/helm-charts",
       "chart": "loki",
       "version": "18.17.1",
-      "values": "base/loki.yaml"
+      "values": "base/loki.yaml",
+      "platforms": [
+        "k3d"
+      ]
     },
     {
       "name": "tempo",
@@ -166,7 +169,10 @@
       "repo": "https://grafana-community.github.io/helm-charts",
       "chart": "tempo",
       "version": "3.2.1",
-      "values": "base/tempo.yaml"
+      "values": "base/tempo.yaml",
+      "platforms": [
+        "k3d"
+      ]
     },
     {
       "name": "pyroscope",
@@ -176,6 +182,30 @@
       "chart": "pyroscope",
       "version": "2.4.3",
       "values": "base/pyroscope.yaml"
+    },
+    {
+      "name": "ack-prometheusservice",
+      "namespace": "svp-obs",
+      "wave": 3,
+      "repo": "oci://public.ecr.aws/aws-controllers-k8s",
+      "chart": "prometheusservice-chart",
+      "version": "1.10.0",
+      "values": "base/ack-prometheusservice.yaml",
+      "platforms": [
+        "eks"
+      ]
+    },
+    {
+      "name": "grafana-operator",
+      "namespace": "svp-obs",
+      "wave": 3,
+      "repo": "https://grafana.github.io/helm-charts",
+      "chart": "grafana-operator",
+      "version": "5.25.0",
+      "values": "base/grafana-operator.yaml",
+      "platforms": [
+        "eks"
+      ]
     },
     {
       "name": "svp-data",
