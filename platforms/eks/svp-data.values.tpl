@@ -3,7 +3,7 @@
 postgres:
   external:
     host: {{ .Values.cluster.rdsAddress | quote }}
-    # The database subnets: the only addresses the pg-bootstrap Job reaches on 5432.
+    # The database subnets: the only addresses the pg-bootstrap Job and svp-ops reach on 5432.
     cidrs: {{ .Values.cluster.dbCidrs | toJson }}
 kafka:
   brokers: {{ .Values.cluster.kafkaBrokers | quote }}
