@@ -30,6 +30,7 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [svp-data](#svp-data)
 - [OpenTelemetry Collector](#opentelemetry-collector)
 - [Telemetry trên EKS](#telemetry-trên-eks)
+- [media-worker trên EKS](#media-worker-trên-eks)
 
 ## Ghim image theo digest
 
@@ -1062,3 +1063,33 @@ flowchart LR
   (`collector.destinations`, `rules.target`, `dashboards.target`, `registryMirror`, `awsEndpointCidrs`, `canaryPrometheus`): schema chặt
   từ chối chúng, hay chart bỏ qua và telemetry, luật, canary của eks không chạy đúng. Chúng chỉ đúng khi `envs/<env>/charts.yaml` trỏ bản
   chart có chúng.
+
+## media-worker trên EKS
+
+Trên `eks` release `media-worker` là bridge tới AWS Elemental MediaConvert, không chạy ffmpeg: `platforms/eks/media-worker.yaml` đặt
+`args: [mediaconvert]`, nên container chạy lệnh con `media-worker mediaconvert` của cùng binary, cùng image. Release, user Kafka, consumer
+group và KEDA của `base/` giữ nguyên; k3d không đặt `args`, nên chạy `serve` (ffmpeg) như compose. Khác biệt là dữ liệu theo nền tảng, không
+`if` trong chart hay trong code. Bridge làm gì, bố cục output và lý do chọn: [`docs/explanation/transcode.md` của
+svp-backend](https://github.com/anhnvcoder/svp-backend/blob/main/docs/explanation/transcode.md).
+
+```mermaid
+flowchart LR
+  kafka[("MSK, dbCidrs:9096")] -- "video.uploaded" --> mw["media-worker mediaconvert (svp)"]
+  mw -- "transcode.completed, transcode.failed" --> kafka
+  mw -- "Probe, CreateJob, GetJob (vpcCidr:443)" --> mc["endpoint interface MediaConvert"]
+  mw -- "ReceiveMessage, DeleteMessage (vpcCidr:443)" --> sqs["endpoint interface SQS"]
+  mw -- "bản ghi job, chép object, master (s3Cidrs:443)" --> s3[("S3 media")]
+  mw -- "credential của role (169.254.170.23:80)" --> agent["agent Pod Identity"]
+```
+
+- **Lệnh**: value `args` của chart `svp-service` chỉ đặt cho container chính; Job migrate không có ở release này.
+- **Biến**: `MEDIACONVERT_QUEUE_ARN`, `MEDIACONVERT_ROLE_ARN`, `TRANSCODE_EVENTS_QUEUE_URL` từ khoá cùng tên của
+  [hợp đồng giá trị `cluster`](../README.md#hợp-đồng-giá-trị-cluster) (`media-worker.values.tpl`); region của mọi client AWS là `S3_REGION`.
+- **Egress**: `externalPeers.s3` thêm `cluster.vpcCidr` cổng 443, vì private DNS của endpoint interface MediaConvert, SQS trả IP trong VPC.
+  Cái giá: pod ra được cổng 443 tới mọi IP trong VPC, không chỉ endpoint. Guard của NetworkPolicy vẫn từ chối `0.0.0.0/0`, `::/0`.
+- **Tài nguyên**: request, limit cỡ một service Go trên Kafka và S3, không cỡ của `base/` (giữ một lần transcode ffmpeg). `scratch` của
+  `base/` giữ nguyên: bridge ghi file nhỏ của mỗi lần thử vào `/work` (`WORK_DIR`) trên root chỉ đọc; `scratch: null` sẽ xoá cả `/work`.
+- **Credential**: EKS Pod Identity của ServiceAccount `svp/media-worker`; quyền của role do `svp-infra` giữ.
+- **Chart cũ**: chart `svp-service` chưa có value `args` thì bản có schema chặt từ chối nó (render lỗi), bản không có schema bỏ qua nó và pod
+  chạy `serve` với tài nguyên của bridge, không đủ cho một lần transcode. Trên `eks` release chỉ đúng khi `envs/<env>/charts.yaml` trỏ bản
+  chart có `args`.

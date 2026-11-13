@@ -212,7 +212,10 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
   "ampEndpoint" (printf "^https://aps-workspaces\\.%s\\.amazonaws\\.com/workspaces/ws-[0-9a-f-]+/$" $awsRegion)
   "logGroup" "^/svp/[a-z]+/otel$"
   "grafanaUrl" (printf "^https://g-[0-9a-z]+\\.grafana-workspace\\.%s\\.amazonaws\\.com$" $awsRegion)
-  "alarmTopicArn" (printf "^arn:aws:sns:%s:[0-9]{12}:svp-[a-z]+-alarms$" $awsRegion) }}
+  "alarmTopicArn" (printf "^arn:aws:sns:%s:[0-9]{12}:svp-[a-z]+-alarms$" $awsRegion)
+  "mediaconvertQueueArn" (printf "^arn:aws:mediaconvert:%s:[0-9]{12}:queues/svp-[a-z]+$" $awsRegion)
+  "mediaconvertRoleArn" "^arn:aws:iam::[0-9]{12}:role/svp-[a-z]+-mediaconvert$"
+  "transcodeEventsQueueUrl" (printf "^https://sqs\\.%s\\.amazonaws\\.com/[0-9]{12}/svp-[a-z]+-transcode-events$" $awsRegion) }}
 {{- range $key := keys $shapes | sortAlpha }}
 {{- $value := get $cluster $key }}
 {{- if not (and (kindIs "string" $value) (regexMatch (get $shapes $key) $value)) }}

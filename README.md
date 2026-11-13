@@ -196,7 +196,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `name` | tên cluster EKS | nhãn ngoài `cluster` của Prometheus agent (`kube-prometheus-stack`), `clusterName` của `aws-load-balancer-controller`, `settings.clusterName` và hàng đợi `settings.interruptionQueue` (`<name>-karpenter`) của `karpenter`, `karpenter.clusterName` (role node, tag discovery) của `svp-cluster` |
 | `region` | region AWS | SigV4 của remote write (`kube-prometheus-stack`), `rules.amp.region`, `dashboards.grafana.region` của `svp-observability`, `sigv4Region` của `canaryPrometheus` (`gateway`, `web`), `SVP_OTELCOL_REGION` của `otel-collector`, `region` của LBC, `AWS_REGION` của `karpenter`, `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
 | `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
-| `vpcCidr` | CIDR | `nodeSubnet` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `awsEndpointCidrs` của `svp-cluster`, `svp-observability` (NetworkPolicy tới endpoint interface), `TRUSTED_PROXY_CIDRS` của `gateway` |
+| `vpcCidr` | CIDR | `nodeSubnet` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `awsEndpointCidrs` của `svp-cluster`, `svp-observability` (NetworkPolicy tới endpoint interface), `externalPeers.s3` (cổng 443, endpoint interface MediaConvert, SQS) của `media-worker`, `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
 | `dbCidrs` | danh sách CIDR | `postgres.external.cidrs`, `kafka.external.cidrs`, `valkey.external.cidrs` của `svp-data`, `postgres.external.cidrs`, `kafka.external.cidrs` của `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service`, `externalPeers.kafka` (cổng 9096) của bốn service đó cùng `media-worker`, `externalPeers.valkey` (cổng 6379) của `gateway`, `feed-service`, `web` |
 | `domain` | tên miền | `dnsNames` `<domain>`, `api.<domain>` của listener `https` và `apexHost`, `wildcardHost` `*.<domain>` (chỉ chart chưa có `listeners` đọc) của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web` |
@@ -215,6 +215,9 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `logGroup` | `/svp/<env>/otel` | `SVP_OTELCOL_LOG_GROUP` của `otel-collector` |
 | `grafanaUrl` | `https://g-….grafana-workspace.<region>.amazonaws.com`, không `/` cuối | `dashboards.grafana.url` của `svp-observability` (CR `Grafana` của Grafana Operator) |
 | `alarmTopicArn` | ARN topic SNS `svp-<env>-alarms` | `rules.amp.alarmTopicArn` của `svp-observability` (đích của `AlertManagerDefinition`) |
+| `mediaconvertQueueArn` | ARN queue MediaConvert `svp-<env>` (`arn:aws:mediaconvert:<region>:<account>:queues/svp-<env>`) | `MEDIACONVERT_QUEUE_ARN` của `media-worker` |
+| `mediaconvertRoleArn` | ARN role IAM `svp-<env>-mediaconvert` (role MediaConvert dùng đọc, ghi S3) | `MEDIACONVERT_ROLE_ARN` của `media-worker` |
+| `transcodeEventsQueueUrl` | URL hàng đợi SQS `svp-<env>-transcode-events` (`https://sqs.<region>.amazonaws.com/<account>/…`) | `TRANSCODE_EVENTS_QUEUE_URL` của `media-worker` |
 | `externalSecretsRoles` | map đúng năm namespace `svp`, `svp-data`, `svp-obs`, `keda`, `argocd` → ARN role IAM | `externalSecrets.aws.roles` của `svp-cluster`: role SecretStore của từng namespace (thiếu namespace thì render dừng) |
 
 Thêm khoá thì sửa cả bốn nơi: output `cluster_values` của `svp-infra`, mẫu và phép kiểm khoá của root ở đây (`argocd/apps/templates/applications.yaml`)
