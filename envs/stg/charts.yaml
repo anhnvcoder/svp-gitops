@@ -1,7 +1,7 @@
 # The commit of the code repository (https://github.com/anhnvcoder/svp-backend) whose charts, deploy/helm/*
 # there, this environment runs: every Application of a chart of that repository reads it at this commit. A change of
 # a chart reaches stg only through this file, together with the images it was built for.
-revision: a8da55c7858d5097d3622252687e361901d7b95a
+revision: 1818374b2a7463e6ed5c4b6d4cf65dd50e53bdc1
 # Derived from that commit; written with it, and the check of this repository computes both again from it.
 # podSecurityVersion of deploy/helm/svp-cluster/values.yaml: the Pod Security Standard version of the namespaces of
 # wave 0, which come before chart svp-cluster labels the others.
