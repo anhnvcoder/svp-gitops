@@ -74,7 +74,8 @@ else
 fi
 
 # Each key: missing, a number instead of a string, and a string of another form. The render must fail on that key.
-keys="ecrRegistry ampWorkspaceId ampEndpoint logGroup grafanaUrl alarmTopicArn"
+keys="ecrRegistry ampWorkspaceId ampEndpoint logGroup grafanaUrl alarmTopicArn mediaconvertQueueArn mediaconvertRoleArn
+  transcodeEventsQueueUrl"
 for key in $keys; do
   for broken in missing type form; do
     case $broken in

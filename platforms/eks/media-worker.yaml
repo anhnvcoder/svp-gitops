@@ -9,3 +9,15 @@ env:
 # Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose certificates chain to a public CA among the system's roots,
 # so the lab cluster's local CA (the chart's localCA) is not mounted.
 localCA: ""
+# The worker runs as the bridge to AWS Elemental MediaConvert, the subcommand of the same binary and image: each
+# video.uploaded becomes a MediaConvert job, settled from the job state events of an SQS queue.
+# Design notes: https://github.com/anhnvcoder/svp-backend/blob/main/docs/explanation/transcode.md
+args: [mediaconvert]
+# No ffmpeg in the pod, only API calls and small objects: the size of a Go service on Kafka and S3 (video-service's),
+# not the base's, which holds a transcode.
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: 500m, memory: 256Mi}
+# The base's scratch stays: the bridge keeps the small files of a try under /work (WORK_DIR) on the read-only root.
+# scratch: null would drop /work with the whole map, and an entry such as tmp cannot be dropped alone, since the chart's
+# values.yaml has no such key (and its schema refuses null there).
