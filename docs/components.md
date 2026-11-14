@@ -992,9 +992,10 @@ không render mục `memory`.
 Trên k3d (`base/`), chart chạy trong namespace `svp-data` một broker Apache Kafka KRaft (StatefulSet `kafka`) và Valkey, cả hai chỉ
 nhận TLS bằng cert ký bởi CA local, cùng Job `kafka-init` tạo user, topic và ACL. `platforms/eks/svp-data.yaml` đặt `postgres`, `s3`,
 `kafka`, `valkey` thành `external`: không broker, Valkey hay object store trong cluster; Job `kafka-init` chỉ tạo topic và ACL trên
-Amazon MSK (user do Terraform gắn vào MSK), Deployment `svp-ops` (CLI vận hành) đăng nhập MSK và ElastiCache. Broker, host và subnet
-database đến từ `svp-data.values.tpl` (`cluster.kafkaBrokers`, `cluster.valkeyHost`, `cluster.dbCidrs`), các địa chỉ duy nhất Job init và
-`svp-ops` với tới (9096, 6379). Số broker, replication và việc chịu mất một availability zone ở prd là cấu hình của MSK
+Amazon MSK (user do Terraform gắn vào MSK), Deployment `svp-ops` (CLI vận hành, container `kafka`, `valkey`, `postgres`) đăng nhập MSK,
+ElastiCache và Postgres của dịch vụ (`svp-pg`). Broker, host và subnet database đến từ `svp-data.values.tpl` (`cluster.kafkaBrokers`,
+`cluster.valkeyHost`, `cluster.dbCidrs`), các địa chỉ duy nhất Job init và `svp-ops` với tới (9096, 6379, 5432).
+Số broker, replication và việc chịu mất một availability zone ở prd là cấu hình của MSK
 ([ADR-0053](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0053-msk-elasticache-valkey.md) của repo code), không ở đây.
 
 ## OpenTelemetry Collector
