@@ -4,5 +4,5 @@
 # envs/stg/dlq-replay.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/dlq-replay
-  tag: "927dd4e9a808"
-  digest: "sha256:64141966d76b2f7b4eb932098ae09f5f7a52274d1c67725ce3b2be2727ea7812"
+  tag: "2e594b05354f"
+  digest: "sha256:b7d9be338ebb2f128f81e4987d337365ff324a7c3582466b2c3d8ac5da407bf5"
