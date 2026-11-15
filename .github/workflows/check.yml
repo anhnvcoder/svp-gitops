@@ -29,8 +29,8 @@ env:
   # The checker release whose deploy/ci/gitops-check.sh checks this tree and the commit of its tag, raised together by
   # one Renovate pull request (a major in its own). Contract changes go expand-contract; design notes: README.md.
   # renovate: datasource=github-tags depName=anhnvcoder/svp-backend extractVersion=^gitops-check-v(?<version>.+)$
-  CHECKER_VERSION: 1.1.0
-  CHECKER_COMMIT: 1c899f0908ee3c19c6ea06ea43704286c00256f2
+  CHECKER_VERSION: 1.1.1
+  CHECKER_COMMIT: e4148365086a773eead04777ed1eb22dda097a7c
 
 jobs:
   # Which areas a pull request changes, so a job whose area it leaves alone skips and gitops-ok accepts that skip.
