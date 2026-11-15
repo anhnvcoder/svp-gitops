@@ -29,6 +29,8 @@ spec:
     - https://argoproj.github.io/argo-helm
     - https://kyverno.github.io/kyverno/
     - https://charts.external-secrets.io
+    # Istio's charts (istio-base, istiod, istio-cni, ztunnel): the repository Istio publishes them to since 1.31.
+    - https://blob.istio.io/istio-release/charts
     # Platform eks only: AWS Load Balancer Controller, Karpenter, ACK's controller for Amazon Managed Service for
     # Prometheus (Grafana Operator's chart is in grafana.github.io above).
     - https://aws.github.io/eks-charts
@@ -54,10 +56,13 @@ spec:
     - {server: https://kubernetes.default.svc, namespace: external-secrets}
     - {server: https://kubernetes.default.svc, namespace: svp-secrets}
     - {server: https://kubernetes.default.svc, namespace: reloader}
+    # The mesh: istio-system its control plane and node agents, svp-mesh the waypoint of chart svp-cluster.
+    - {server: https://kubernetes.default.svc, namespace: istio-system}
+    - {server: https://kubernetes.default.svc, namespace: svp-mesh}
   # Cluster-scoped kinds the charts render (helm template of every component with its values, on each platform), nothing
   # else: no PersistentVolume, PriorityClass, IngressClass, node or admission policy of another kind. Namespaced kinds
-  # are not listed: every one is allowed in the namespaces above. Reloader, which watches the project's namespaces only,
-  # renders none; AWS Load Balancer Controller (platform eks) needs none beyond CRDs, RBAC and webhooks.
+  # are allowed in the namespaces above. Reloader renders none; AWS Load Balancer Controller and Istio's charts none
+  # beyond CRDs, RBAC and webhooks (istiod makes GatewayClass istio-waypoint itself at run time, not through Argo CD).
   clusterResourceWhitelist:
     - {group: "", kind: Namespace}
     - {group: apiextensions.k8s.io, kind: CustomResourceDefinition}

@@ -11,7 +11,7 @@
 # A taken-over controller keeps, in argo-rollouts, the chart's rules, which no value of chart 2.43.8 narrows (Secrets
 # there, Jobs, Deployments and pods, Services, Ingresses); Pod Security "restricted" bounds what those can start. In
 # svp, ReplicaSets and the pods it lists and evicts, which reaches the Secrets of svp too, as the control plane's
-# Deployment controller does. No Secret of another namespace, no route of svp but HTTPRoutes api and web.
+# Deployment controller does. No Secret of another namespace, no route of svp but the routes of its canaries.
 
 # Upgrading: compare the controller's rules in Role argo-rollouts (namespace argo-rollouts) with the old render, check
 # that the new controller still watches only what Role argo-rollouts of svp allows, and that it logs no "forbidden"
@@ -49,22 +49,22 @@ controller:
   # Traffic router plugin Gateway API v0.17.0, the arm64 binary (a Mac); argo-rollouts-amd64.yaml replaces this list on
   # amd64 nodes. The controller downloads it at start (namespace argo-rollouts denies no egress) and refuses a file
   # whose sha256 differs; the release publishes no checksum file, so the value was computed on the downloaded asset. It
-  # runs as a child process with the controller's ServiceAccount: it gets and updates HTTPRoutes api and web.
+  # runs as a child process with the controller's ServiceAccount: it gets and updates the routes of the canaries.
   trafficRouterPlugins:
     - name: argoproj-labs/gatewayAPI
       location: https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi/releases/download/v0.17.0/gatewayapi-plugin-linux-arm64
       sha256: 5221279f7bf2c9b2c0ff6ed7ff12718ecce1d4892f1ff5e5224bb723cfd0fd92
 
 # The providers' rules (Istio, SMI, Ambassador, ..., Gateway API) would only be added to the Role in argo-rollouts,
-# which holds no route; the plugin's right on HTTPRoutes api and web is in Role argo-rollouts of svp.
+# which holds no route; the plugin's rights on the canaries' routes are in Role argo-rollouts of svp.
 providerRBAC:
   enabled: false
 
 extraObjects:
   # What the controller does in svp, by rule. Left out of the chart's rules: Secrets, ConfigMaps, Jobs (job metrics run
   # in argo-rollouts, see extraEnv), Deployments and pod templates (no workloadRef), pod updates, creating and deleting
-  # Services (experiments only), writes on Ingresses, ClusterAnalysisTemplates and every traffic provider but HTTPRoutes
-  # api and web.
+  # Services (experiments only), writes on Ingresses, ClusterAnalysisTemplates and every traffic provider but the
+  # canaries' HTTPRoutes and GRPCRoutes.
   - apiVersion: rbac.authorization.k8s.io/v1
     kind: Role
     metadata:
@@ -106,11 +106,16 @@ extraObjects:
       - apiGroups: [networking.k8s.io]
         resources: [ingresses]
         verbs: [list, watch]
-      # The plugin reads the route of each Rollout by name (api of the gateway, web of the web client) and writes the
-      # weights of its two backendRefs (and a label while a canary runs) with an update.
+      # The plugin reads the route of each Rollout by name and writes the weights of its two backendRefs (and a label
+      # while a canary runs) with an update: HTTPRoute api of the gateway and web of the web client through Envoy, the
+      # GRPCRoute named after each gRPC service through the waypoint (component canaryRoute of components.json).
       - apiGroups: [gateway.networking.k8s.io]
         resources: [httproutes]
         resourceNames: [api, web]
+        verbs: [get, update]
+      - apiGroups: [gateway.networking.k8s.io]
+        resources: [grpcroutes]
+        resourceNames: [user-service, video-service, engagement-service, feed-service]
         verbs: [get, update]
   - apiVersion: rbac.authorization.k8s.io/v1
     kind: RoleBinding
