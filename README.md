@@ -260,9 +260,9 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 
 ## Check
 
-`.github/workflows/check.yml` checkout repo này và repo code ở `CHECKER_COMMIT` (ghim trong chính workflow, đổi bằng PR có Code Owner;
-Renovate đề xuất commit mới), rồi chạy `deploy/ci/gitops-check.sh` của commit đó (job `gitops`, chỉ quyền `contents: read`, không secret,
-check tổng `gitops-ok`):
+`.github/workflows/check.yml` checkout repo này và repo code ở bản phát hành checker ghim trong chính workflow (mục [Bản
+phát hành checker](#bản-phát-hành-checker), đổi bằng PR có Code Owner), rồi chạy `deploy/ci/gitops-check.sh` của commit
+đó (job `gitops`, chỉ quyền `contents: read`, không secret, check tổng `gitops-ok`):
 
 1. Cây: `envs/` đúng stg và prd; `charts.yaml` đúng ba khoá (prd thêm được `gitopsRevision`: commit trên `main` của repo này có
    `argocd/apps`), `revision` là commit trên `main` của repo code, hai giá trị dẫn xuất tính lại từ commit đó; mỗi `envs/<env>/images/<svc>.yaml` chỉ khối `image`, repository là `<imagePrefix><svc>` của một nguồn phát hành có `<svc>`
@@ -301,6 +301,46 @@ một bản clone đủ lịch sử của repo code (`origin/main` đã fetch):
 ```sh
 deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]
 deploy/ci/gitops-check-test.sh <thư mục clone svp-gitops>
+```
+
+### Bản phát hành checker
+
+Checker là `deploy/ci/gitops-check.sh` cùng các file nó đọc trong `deploy/ci/` của repo code. Repo code phát hành nó
+theo semver bằng release-please, từ tiêu đề Conventional Commits của các commit đổi `deploy/ci`; mỗi bản là một tag
+`gitops-check-v<semver>` mà ruleset của repo code cấm dời hay xoá. `env` của `check.yml` ghim một bản bằng hai dòng:
+
+- `CHECKER_VERSION`: semver của bản, ngay dưới dòng `# renovate:` nêu datasource `github-tags` và `extractVersion` của
+  tag.
+- `CHECKER_COMMIT`: commit mà tag `gitops-check-v<CHECKER_VERSION>` trỏ tới; hai job dùng checker (`gitops`,
+  `diff-preview`) checkout repo code ở commit này và cài Helm theo `Makefile` của nó. Chart của mỗi env vẫn render ở
+  `revision` của env, đọc từ lịch sử repo code, không theo bản checker.
+
+Bước đầu của hai job đó, trước mọi checkout, đọc tag ẩn danh bằng `git ls-remote` (không token) và đỏ khi commit của tag
+khác `CHECKER_COMMIT`; thông điệp lỗi nêu tag, commit thật của tag và `CHECKER_COMMIT`. Sửa tay một dòng mà không sửa
+dòng kia, hay ghim một commit không phải của bản phát hành, đều đỏ ở đây.
+
+Nâng bản: Renovate (customManager `github-tags` của `renovate.json`) mở một PR đổi cả hai dòng khi repo code có tag mới,
+không chờ lịch tuần hay `minimumReleaseAge`; bản major ở PR riêng. PR đổi `.github/` nên cần người học duyệt: trước khi
+merge, đọc ghi chú phát hành và log giữa hai tag theo runbook
+[`gitops-checker-release.md`](https://github.com/anhnvcoder/svp-backend/blob/main/docs/runbooks/gitops-checker-release.md)
+của repo code (mục "Nâng ghim"). Chỉ sửa tay khi Renovate không tới được, cả hai dòng trong một PR.
+
+Đổi hợp đồng giữa checker và cây này (khoá mới, dạng file mới, luật mới) đi theo expand–contract, mỗi bước một PR qua
+cổng thường:
+
+1. Expand: repo code nhận cả dạng cũ lẫn mới, phát hành minor. CI repo code chạy checker với `main` của repo này, nên
+   dạng cũ vẫn được kiểm.
+2. Migrate: ở đây merge PR Renovate nâng lên bản minor đó, rồi PR đổi cây sang dạng mới.
+3. Contract: repo code bỏ dạng cũ, phát hành major; ở đây merge PR Renovate major riêng.
+
+Sai thứ tự thì cổng chặn: PR ở đây dùng dạng mới khi ghim còn bản cũ thì `gitops-ok` đỏ; repo code bỏ dạng cũ khi `main`
+ở đây còn dạng cũ thì CI của repo code đỏ. Không bước nào cần ghim tạm hay sửa tay `CHECKER_COMMIT`.
+
+Kiểm commit của một tag trên máy, ở bản clone repo code:
+
+```sh
+git fetch --tags origin
+git rev-parse 'gitops-check-v<CHECKER_VERSION>^{commit}'
 ```
 
 ### Diff preview

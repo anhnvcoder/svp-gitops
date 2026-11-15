@@ -1,4 +1,5 @@
-# Checks every pull request and push to main with deploy/ci/gitops-check.sh of the code repository at CHECKER_COMMIT.
+# Checks every pull request and push to main with deploy/ci/gitops-check.sh of the code repository at the checker
+# release CHECKER_VERSION: the commit CHECKER_COMMIT of its tag gitops-check-v<version>, which each job checks first.
 # A pull request here changes what checks it only by changing this file, which has a code owner.
 # Job gitops-ok is the only check the ruleset of main requires.
 # Public repository, a fork's pull request runs this file with the fork's tree, so:
@@ -25,9 +26,11 @@ env:
   # zizmor from its official image pinned by digest (multi-arch), run with docker: every action here is GitHub's own.
   # renovate: datasource=docker depName=ghcr.io/zizmorcore/zizmor
   ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.31.1@sha256:42d409dbb851d4c5d35a058cf042b828bea1e3f2884378c526eb0974780e18d9
-  # Commit of the code repository whose deploy/ci/gitops-check.sh checks this tree; Renovate proposes the newest.
-  # renovate: datasource=git-refs depName=https://github.com/anhnvcoder/svp-backend branch=main
-  CHECKER_COMMIT: 927dd4e9a8080378c34036d3f7beb12722d2547f
+  # The checker release whose deploy/ci/gitops-check.sh checks this tree and the commit of its tag, raised together by
+  # one Renovate pull request (a major in its own). Contract changes go expand-contract; design notes: README.md.
+  # renovate: datasource=github-tags depName=anhnvcoder/svp-backend extractVersion=^gitops-check-v(?<version>.+)$
+  CHECKER_VERSION: 1.0.0
+  CHECKER_COMMIT: 976bee066bb0892f7d84f6715819c4568b885446
 
 jobs:
   # Which areas a pull request changes, so a job whose area it leaves alone skips and gitops-ok accepts that skip.
@@ -88,6 +91,22 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Before any checkout: a pin edited on one line only, or a commit that is not the release's, fails here.
+      # An anonymous read of the tag; the peeled line (^{}) of an annotated tag names its commit.
+      - name: The checker commit is the commit of the release tag
+        env:
+          CODE_REPO: https://github.com/anhnvcoder/svp-backend.git
+        run: |
+          tag="gitops-check-v$CHECKER_VERSION" ref="refs/tags/gitops-check-v$CHECKER_VERSION"
+          actual=$(git ls-remote --tags "$CODE_REPO" "$ref" "$ref^{}" | awk -v ref="$ref" '
+            $2 == ref && !peeled { sha = $1 }
+            $2 == ref "^{}" { sha = $1; peeled = 1 }
+            END { print sha }')
+          if [ "$actual" != "$CHECKER_COMMIT" ]; then
+            echo "::error::tag $tag of $CODE_REPO is commit ${actual:-none}, CHECKER_COMMIT is $CHECKER_COMMIT"
+            exit 1
+          fi
+          echo "tag $tag is commit $actual"
       # The whole history of both: the base commit below and the revisions of envs/*/charts.yaml (each on main of the
       # code repository) are read from it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,6 +194,22 @@ jobs:
       # renovate: datasource=docker depName=dagandersen/argocd-diff-preview
       ARGOCD_DIFF_PREVIEW_IMAGE: dagandersen/argocd-diff-preview:v0.2.17@sha256:ea90848df29337b50d5058330210b38e39232360b78d9c60951fc92e454c6941
     steps:
+      # Before any checkout: a pin edited on one line only, or a commit that is not the release's, fails here.
+      # An anonymous read of the tag; the peeled line (^{}) of an annotated tag names its commit.
+      - name: The checker commit is the commit of the release tag
+        env:
+          CODE_REPO: https://github.com/anhnvcoder/svp-backend.git
+        run: |
+          tag="gitops-check-v$CHECKER_VERSION" ref="refs/tags/gitops-check-v$CHECKER_VERSION"
+          actual=$(git ls-remote --tags "$CODE_REPO" "$ref" "$ref^{}" | awk -v ref="$ref" '
+            $2 == ref && !peeled { sha = $1 }
+            $2 == ref "^{}" { sha = $1; peeled = 1 }
+            END { print sha }')
+          if [ "$actual" != "$CHECKER_COMMIT" ]; then
+            echo "::error::tag $tag of $CODE_REPO is commit ${actual:-none}, CHECKER_COMMIT is $CHECKER_COMMIT"
+            exit 1
+          fi
+          echo "tag $tag is commit $actual"
       # The merge commit of the pull request and its first parent.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

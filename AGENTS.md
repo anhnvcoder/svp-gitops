@@ -36,10 +36,13 @@ Quy ước chung (ngôn ngữ, tài liệu timeless, ADR, comment, Git, repo pub
 
 ## Kiểm tra
 
-- Check bắt buộc `gitops-ok` (`.github/workflows/check.yml`): checkout repo code ở `CHECKER_COMMIT` (ghim trong workflow) rồi chạy
-  `deploy/ci/gitops-check.sh` của nó: cây thư mục và luật tác giả của bot, render root hai tầng (`argocd/root` rồi `argocd/apps`)
-  theo env × nền tảng × kiến trúc node, render chart của repo code ở `revision` của env, mọi image ghim digest, chữ ký, attestation
-  và provenance của image đổi.
+- Check bắt buộc `gitops-ok` (`.github/workflows/check.yml`): checkout repo code ở bản phát hành checker ghim trong
+  workflow (`CHECKER_VERSION` cùng `CHECKER_COMMIT`, commit của tag `gitops-check-v<CHECKER_VERSION>`; một bước đỏ khi
+  tag không trỏ đúng commit đó; Renovate nâng cả hai trong một PR, không sửa tay một dòng; đổi hợp đồng theo
+  expand–contract: mục "Bản phát hành checker" của `README.md`, runbook `docs/runbooks/gitops-checker-release.md` của
+  repo code) rồi chạy `deploy/ci/gitops-check.sh` của nó: cây thư mục và luật tác giả của bot, render root hai tầng
+  (`argocd/root` rồi `argocd/apps`) theo env × nền tảng × kiến trúc node, render chart của repo code ở `revision` của
+  env, mọi image ghim digest, chữ ký, attestation và provenance của image đổi.
 - Chạy trên máy từ gốc bản clone đủ lịch sử của repo code: `deploy/ci/gitops-check.sh <thư mục clone svp-gitops> [<commit base>]`;
   `make helm-check` của backend render mọi chart với overlay của bản clone này.
 - `make docs-check`: markdownlint-cli2 và lychee `--offline` trên mọi `.md` (image ghim digest, không mạng); `DOCS='<file hay glob>'`
