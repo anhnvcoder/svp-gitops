@@ -259,7 +259,10 @@ không phải của môi trường. `envs/<env>/` gồm:
   ConfigMap nó không render: checksum đi vào pod template, nên config đổi thì pod roll, không đổi thì không. Do đó `charts` không phải
   tên component;
 - `images/<name>.yaml` (`envFiles.images`, tên tới nội dung) cho mỗi release chart `svp-service`: khối image của nó (`repository`, `tag`,
-  `digest`) và không gì khác, đọc sau overlay. Release không có file ở đó sẽ chạy image không thuộc môi trường nào, nên thiếu là lỗi;
+  `digest`) và không gì khác, đọc sau overlay. Release không có file ở đó sẽ chạy image không thuộc môi trường nào, nên thiếu là lỗi.
+  File mang tên component của chart khác là lỗi. File mang tên chưa component nào có là release mới: promote ghi file image của nó
+  trước khi `components.json` liệt kê nó, nên chart này bỏ qua file đó, không render Application; check của repo này từ chối tên không
+  thuộc bảng nguồn của repo code (mục "Check" của [`README.md`](../README.md));
 - overlay `<name>.yaml` (`envFiles.overlays`, tên tới nội dung) cho mỗi component (tên trong `components.json`) mà values khác base ở đó, và
   chỉ những khác biệt, đọc sau values của base và của nền tảng. Overlay không bao giờ có image (mọi môi trường chạy image build và ký một
   lần, mà `images/` nêu), cũng không `canary` hay `httpRoute.name` của một release chart `svp-service` (`canaryRoute` ở dưới phản chiếu hai

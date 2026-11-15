@@ -97,10 +97,12 @@ check of this repository, which renders every overlay. */}}
 {{- if not (regexMatch "^[0-9a-f]{64}$" $collectorSum) }}
 {{- fail (printf "envs/%s/charts.yaml: collectorConfigSha256 is %q, a sha256 (64 hex)" $env $collectorSum) }}
 {{- end }}
-{{- /* The image of every release of chart svp-service, and nothing else under images/. */}}
+{{- /* The image of every release of chart svp-service. A file of a name no component has is a new release, which the
+promote writes before components.json lists it: it renders nothing here, and the check of this repository refuses a
+name outside the code repository's release sources. A file named after a component of another chart still fails. */}}
 {{- $images := get $envFiles "images" | default dict }}
 {{- range $name, $values := $images }}
-{{- if ne (get $names $name) "deploy/helm/svp-service" }}
+{{- if and (hasKey $names $name) (ne (get $names $name) "deploy/helm/svp-service") }}
 {{- fail (printf "envs/%s/images/%s.yaml: an image file is <name>.yaml, name a release of chart svp-service in components.json" $env $name) }}
 {{- end }}
 {{- if not (kindIs "map" ($values | default dict)) }}

@@ -97,4 +97,30 @@ for key in $keys; do
     fi
   done
 done
+
+# The rule of images/: a new release, whose image file the promote writes before components.json lists it, renders
+# without an Application; an image file named after a component of another chart fails.
+if render new-release '.envFiles.images["dlq-replay"] = {}'; then
+  got=$(to_json "$tmp/new-release.yaml" | jq '[.[] | select(.metadata.name == "dlq-replay")] | length')
+  if [ "$got" = 0 ]; then
+    echo "ok    new-release: images/dlq-replay.yaml renders, no Application dlq-replay"
+  else
+    echo "FAIL  new-release: $got objects named dlq-replay, want none"
+    fail=1
+  fi
+else
+  sed 's/^/    /' "$tmp/new-release.err"
+  echo "FAIL  new-release: an image file of a name no component has does not render"
+  fail=1
+fi
+if render other-chart '.envFiles.images["svp-data"] = {}'; then
+  echo "FAIL  other-chart: renders, want the render to fail on images/svp-data.yaml"
+  fail=1
+elif grep -q "envs/stg/images/svp-data.yaml: an image file is" "$tmp/other-chart.err"; then
+  echo "ok    other-chart: fails on images/svp-data.yaml"
+else
+  sed 's/^/    /' "$tmp/other-chart.err"
+  echo "FAIL  other-chart: fails, but not on images/svp-data.yaml (above)"
+  fail=1
+fi
 exit "$fail"
