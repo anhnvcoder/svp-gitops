@@ -4,5 +4,5 @@
 # envs/stg/user-service.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/user-service
-  tag: "927dd4e9a808"
-  digest: "sha256:e341561b947e2c45dea83f028722e9e7e9df8fef15cb59921c46ef6ce9f09721"
+  tag: "2e594b05354f"
+  digest: "sha256:5fd855054d7a0962ba7dd978629bdf0d9fc6ad29dd031f635d6b718051714eaf"
