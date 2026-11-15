@@ -4,5 +4,5 @@
 # envs/stg/gateway.yaml when there is one.
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/gateway
-  tag: "bd38c2b26437"
-  digest: "sha256:b6ca058f32b5e1d4ab4e077ca3865ed4d0f40d65d18514cc0ff93260c9111628"
+  tag: "5e11f3b736a9"
+  digest: "sha256:6ffebaf77d50f75695fabe2d772a650d1afc54def510e489b1f863c98a3f1f67"
