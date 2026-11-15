@@ -1,0 +1,24 @@
+# Platform eks: OpenCost queries the env's Amazon Managed Service for Prometheus workspace, where the agent writes,
+# through the chart's SigV4 proxy sidecar on localhost:8005, which signs with the pod's EKS Pod Identity (ServiceAccount
+# opencost, allowed to read that workspace only). Node prices come from AWS's public price list, downloaded without
+# credentials. Workspace, region and cluster id: opencost.values.tpl.
+opencost:
+  prometheus:
+    # The chart fails when more than one source is on.
+    internal:
+      enabled: false
+    amp:
+      enabled: true
+  sigV4Proxy:
+    # Pod Security "restricted"; the image names no user.
+    securityContext:
+      runAsUser: 65534
+      runAsGroup: 65534
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    # Not measured yet: one proxy forwarding the queries of one OpenCost.
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 128Mi}

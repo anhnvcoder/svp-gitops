@@ -403,6 +403,45 @@
     },
     {
       "matchFileNames": [
+        "base/opencost.yaml"
+      ],
+      "groupName": "opencost chart"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "opencost"
+      ],
+      "groupName": "opencost chart"
+    },
+    {
+      "matchFileNames": [
+        "base/blackbox-exporter.yaml",
+        "base/blackbox-exporter-public.yaml"
+      ],
+      "groupName": "prometheus-blackbox-exporter chart"
+    },
+    {
+      "description": "Components blackbox-exporter (k3d) and blackbox-exporter-public (eks): the same chart and version, moved together.",
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDepNames": [
+        "prometheus-blackbox-exporter"
+      ],
+      "groupName": "prometheus-blackbox-exporter chart"
+    },
+    {
+      "description": "The blackbox exporter image of base/blackbox-exporter.yaml and base/blackbox-exporter-public.yaml is also pinned in the code repository (compose): keep the versions in step.",
+      "matchDepNames": [
+        "quay.io/prometheus/blackbox-exporter"
+      ],
+      "groupName": "prometheus-blackbox-exporter chart"
+    },
+    {
+      "matchFileNames": [
         "base/argo-cd.yaml"
       ],
       "groupName": "argo-cd chart"

@@ -214,6 +214,30 @@
       "path": "deploy/helm/svp-data"
     },
     {
+      "name": "blackbox-exporter",
+      "namespace": "svp-obs",
+      "wave": 4,
+      "repo": "https://prometheus-community.github.io/helm-charts",
+      "chart": "prometheus-blackbox-exporter",
+      "version": "11.21.3",
+      "values": "base/blackbox-exporter.yaml",
+      "platforms": [
+        "k3d"
+      ]
+    },
+    {
+      "name": "blackbox-exporter-public",
+      "namespace": "svp-obs",
+      "wave": 4,
+      "repo": "https://prometheus-community.github.io/helm-charts",
+      "chart": "prometheus-blackbox-exporter",
+      "version": "11.21.3",
+      "values": "base/blackbox-exporter-public.yaml",
+      "platforms": [
+        "eks"
+      ]
+    },
+    {
       "name": "svp-observability",
       "namespace": "svp-obs",
       "wave": 5,
@@ -278,6 +302,15 @@
       "path": "deploy/helm/svp-service",
       "values": "base/services/web.yaml",
       "canaryRoute": "web"
+    },
+    {
+      "name": "opencost",
+      "namespace": "svp-obs",
+      "wave": 8,
+      "repo": "https://opencost.github.io/opencost-helm-chart",
+      "chart": "opencost",
+      "version": "2.5.34",
+      "values": "base/opencost.yaml"
     }
   ]
 }

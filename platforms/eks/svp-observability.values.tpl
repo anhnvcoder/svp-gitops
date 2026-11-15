@@ -25,3 +25,15 @@ dashboards:
 # The VPC's CIDR, where the private DNS of the interface endpoints puts AMP, CloudWatch Logs and X-Ray.
 awsEndpointCidrs:
   - {{ .Values.cluster.vpcCidr | quote }}
+# The uptime probes of the public names: web, api and the probe object of the media bucket through CloudFront, and
+# their DNS names, asked of kube-dns (modules of platforms/eks/blackbox-exporter-public.values.tpl).
+{{- $dns := "kube-dns.kube-system.svc.cluster.local:53" }}
+probes:
+  http:
+    - {name: web, module: http_public, url: {{ printf "https://%s/healthz" .Values.cluster.domain | quote }}}
+    - {name: api, module: http_public, url: {{ printf "https://api.%s/readyz" .Values.cluster.domain | quote }}}
+    - {name: media, module: http_public, url: {{ printf "https://%s/media/uptime-probe.txt" .Values.cluster.mediaDomain | quote }}}
+  dns:
+    - {name: web, module: dns_web, server: {{ $dns | quote }}}
+    - {name: api, module: dns_api, server: {{ $dns | quote }}}
+    - {name: media, module: dns_media, server: {{ $dns | quote }}}

@@ -28,9 +28,11 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [Loki](#loki)
 - [Tempo](#tempo)
 - [svp-data](#svp-data)
+- [Blackbox exporter](#blackbox-exporter)
 - [OpenTelemetry Collector](#opentelemetry-collector)
 - [Telemetry trên EKS](#telemetry-trên-eks)
 - [media-worker trên EKS](#media-worker-trên-eks)
+- [OpenCost](#opencost)
 
 ## Ghim image theo digest
 
@@ -998,6 +1000,56 @@ ElastiCache và Postgres của dịch vụ (`svp-pg`). Broker, host và subnet d
 Số broker, replication và việc chịu mất một availability zone ở prd là cấu hình của MSK
 ([ADR-0053](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0053-msk-elasticache-valkey.md) của repo code), không ở đây.
 
+## Blackbox exporter
+
+Blackbox exporter (chart `prometheus-blackbox-exporter` của `prometheus-community.github.io/helm-charts`) probe đường người dùng đi từ trong
+cluster và trả kết quả thành metric cho Prometheus. Mỗi nền tảng có một Application, cùng chart, cùng namespace `svp-obs`, wave 4 của
+`argocd/apps/components.json`: `blackbox-exporter` trên k3d (`base/blackbox-exporter.yaml`) và `blackbox-exporter-public` trên `eks`
+(`base/blackbox-exporter-public.yaml` cộng `platforms/eks/blackbox-exporter-public.values.tpl`). Hai release khác tên nhưng cùng
+`fullnameOverride: blackbox-exporter`, nên Service, `Probe` và NetworkPolicy của chart `svp-observability` đều gọi một tên. Nhãn pod
+chỉ chọn theo tên chart, không theo release, vì chart `svp-observability` không biết nền tảng.
+
+Tách thành hai Application thay vì một, vì hai bên probe khác hẳn nhau: k3d không có DNS công khai tới `svp.localhost`, còn `eks` cần
+domain thật của cluster từ hợp đồng giá trị `cluster`. Mỗi cái chỉ có module của nền tảng mình, nên không cần `if` trong values.
+
+Wave 4 đứng trước `svp-observability` (wave 5), chart chứa `Probe` trỏ tới Service này. Các probe đích và URL nằm ở `probes` của
+chart `svp-observability`: mặc định là ba host của Gateway svp trên k3d, `platforms/eks/svp-observability.values.tpl` thay bằng đích công
+khai. Mỗi mục của `probes` thành một `Probe`, nên thêm đích là thêm một mục, không thêm template.
+
+### Module
+
+Mọi module HTTP chỉ đạt khi server trả `200` ngay lần đầu, không theo redirect, qua IPv4, với `User-Agent: svp-uptime-probe`. Hai nền
+tảng khác nhau ở cách kiểm HTTPS:
+
+- **k3d** (`http_local_web`, `http_local_api`, `http_local_media`): `Host` và SNI chọn listener của Gateway svp (`svp.localhost`,
+  `api.svp.localhost`, `s3.svp.localhost`), `fail_if_not_ssl: true`, `insecure_skip_verify: true`. Lý do: cert của listener do
+  cert-manager ký bằng CA `svp-ca` sinh trong cluster, còn `svp-obs` không có bản CA đó, nên chuỗi không kiểm được. Blackbox vẫn đọc
+  cert peer, nên `probe_ssl_earliest_cert_expiry` có. Cái giá: probe k3d không kiểm chuỗi tin cậy.
+- **eks** (`http_public`): kiểm HTTPS bằng CA hệ thống, như trình duyệt, qua đường thật: DNS công khai, CloudFront (WAF), ALB, Envoy.
+  Module `dns_web`, `dns_api`, `dns_media` là probe DNS: hỏi `kube-dns` và thất bại khi câu trả lời không có bản ghi A, nên tên miền
+  bị gỡ khỏi DNS công khai cũng báo mất.
+
+Probe object media (`media/uptime-probe.txt`) nằm trong bucket media ở mọi nền tảng, để probe không phụ thuộc nội dung video. Trên
+`eks` do Terraform của repo hạ tầng tạo, trên k3d và compose do `deploy/s3/init.sh` ghi.
+
+```mermaid
+flowchart LR
+  prom["Prometheus agent (svp-obs)"] -- "job blackbox-http" --> bb["blackbox-exporter (svp-obs)"]
+  bb -- "dns_* (kube-dns)" --> kdns["kube-dns"]
+  bb -- "http_public, HTTPS" --> cf[("CloudFront, WAF")]
+  cf --> alb["ALB internal"] --> envoy["Envoy của Gateway svp"] --> app["web, gateway, media"]
+```
+
+Đường trên là `eks`. k3d đi thẳng từ blackbox tới Service `svp-envoy` trong cluster, không qua CloudFront hay DNS.
+
+### Độ sẵn sàng
+
+Hai replica trải theo zone, PodDisruptionBudget giữ một pod lúc drain: một node hay một zone rớt không làm mất probe. Pod đạt Pod Security
+`restricted` với `seccompProfile: RuntimeDefault`. Tài nguyên ghi ở values, còn chưa đo.
+
+Compose chạy exporter cùng image đã ghim digest ở `deploy/compose/compose.yaml`, chỉ ở profile `obs`, với module `http_compose` và một
+job `blackbox-http` của Prometheus; không có probe DNS.
+
 ## OpenTelemetry Collector
 
 256 MiB như `mem_limit` của compose. Config là phần chung `deploy/observability/otelcol/k8s-config.yaml` ghép với file đích của nền tảng
@@ -1094,3 +1146,45 @@ flowchart LR
 - **Chart cũ**: chart `svp-service` chưa có value `args` thì bản có schema chặt từ chối nó (render lỗi), bản không có schema bỏ qua nó và pod
   chạy `serve` với tài nguyên của bridge, không đủ cho một lần transcode. Trên `eks` release chỉ đúng khi `envs/<env>/charts.yaml` trỏ bản
   chart có `args`.
+
+## OpenCost
+
+OpenCost (chart `opencost` của `opencost.github.io/opencost-helm-chart`, do dự án OpenCost phát hành) tính chi phí CPU và RAM được cấp
+phát cho từng container, từ giá của node và metric của Prometheus, rồi xuất lại thành metric ở cổng 9003. Release `opencost` ở `svp-obs`,
+wave 8 của `argocd/apps/components.json`, trên mọi nền tảng. Chart là bản chính thức, ghim version ở `components.json`; quyết định dùng nó
+và phương án đã bỏ nằm ở [ADR về chi phí và uptime](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0074-cost-uptime.md) của repo code.
+
+Đặt ở wave cuối vì pod chỉ Ready khi đọc được Prometheus, mà đường đó cần NetworkPolicy của `svp-observability` (wave 5) và, trên `eks`, Pod
+Identity. Root chờ từng wave, nên đặt sớm hơn thì một cluster thiếu một trong hai sẽ không dựng được service nào vì một component không có
+cảnh báo page nào đọc.
+
+Trong `base/opencost.yaml`:
+
+- UI và MCP tắt: chi phí xem ở Grafana (dashboard `svp-cost`) và qua API cổng 9003. Một replica, vì khởi động lại chỉ đọc lại Prometheus.
+- `cloudCost` tắt: không đối soát với CUR hay feed spot. Cluster sống vài giờ, còn các file đó đến sau 24 đến 48 giờ, nên đối soát không
+  bao giờ chạy kịp khi cluster còn.
+- `kubeStateMetrics.emitKsmV1Metrics` tắt: kube-state-metrics của kube-prometheus-stack đã có các series đó.
+- Pod đạt Pod Security `restricted`: root chỉ đọc, hai `emptyDir` cho đường nó ghi (cấu hình giá và `/tmp`). Nhãn `svp-kube-api: allow` mở
+  cho nó đường tới API server, vì nó đọc node, pod và các object nó định giá.
+- `resources` đặt theo dung lượng tệp giá và số container cần định giá, không dùng mặc định của chart. Lý do ghi trong file.
+- Sidecar ký SigV4 ghim digest ở `base/` (Renovate chỉ đọc `base/`), vì chart mặc định dùng tag `latest`.
+
+Nguồn Prometheus khác theo nền tảng:
+
+- **k3d**: Service `kps-prometheus` của `svp-obs` cổng 9090, giá mặc định của OpenCost.
+- **eks**: Prometheus không phải nguồn. OpenCost truy vấn workspace AMP của env qua sidecar `sigv4proxy` (cổng 8005 trên localhost), sidecar ký
+  bằng Pod Identity của role `<cluster>-opencost`. Role chỉ có bốn quyền đọc trên workspace đó, không có quyền giá, EC2 hay S3. Workspace,
+  region và tên cluster đến từ hợp đồng giá trị `cluster` (`platforms/eks/opencost.values.tpl`). Giá lấy từ bảng giá công khai của AWS,
+  tải không cần credential: giá on-demand niêm yết, không gồm giảm giá hay Savings Plans. Node Spot của stg được tính theo cách OpenCost
+  làm khi không có feed, nên con số đó là ước lượng.
+
+Metric chi phí (luật nhóm `svp-cost` của chart `svp-observability` và dashboard `svp-cost`) đọc từ OpenCost qua Prometheus. Compose không
+có OpenCost, nên dashboard trống ở đó.
+
+```mermaid
+flowchart LR
+  kps["Prometheus, kps-prometheus (k3d)"] -- "truy vấn" --> ocost["opencost (svp-obs)"]
+  amp[("AMP workspace (eks)")] -- "truy vấn, SigV4 qua sigv4proxy" --> ocost
+  ocost -- "metric :9003, ServiceMonitor" --> prom["Prometheus, agent trên eks"]
+  pricing[("bảng giá AWS công khai")] -- "tải" --> ocost
+```
