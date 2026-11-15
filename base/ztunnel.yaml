@@ -6,7 +6,7 @@
 profile: ambient
 global:
   # Sets only the CNI paths of k3s in this chart; kept equal to istiod's and istio-cni's, as Istio's install asks.
-  platform: k3d
+  platform: k3s
 
 image: docker.io/istio/ztunnel:1.32.0-distroless@sha256:953a77fc17379301de4b7c6697b1668471c9c1f6ff912c9c5b78f454ab362180
 

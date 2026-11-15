@@ -6,7 +6,7 @@
 profile: ambient
 global:
   # Sets only the CNI paths of k3s in this chart; kept equal to istio-cni's and ztunnel's, as Istio's install asks.
-  platform: k3d
+  platform: k3s
   # The waypoint's istio-proxy runs global.proxy.image as written, so it is pinned here: istiod makes that pod at
   # run time, no render shows it. proxy_init (sidecars only, unused in ambient) is pinned the same.
   proxy:
