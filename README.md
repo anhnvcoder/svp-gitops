@@ -205,7 +205,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `rdsAddress` | tên miền | `postgres.external.host` của `svp-data`; `externalSecrets.postgres` (`<rdsAddress>:5432`, host của mọi `DATABASE_URL`) của `svp-cluster` |
 | `uploadsBucket` | tên bucket | `S3_UPLOADS_BUCKET` của `video-service`, `media-worker`; `UPLOAD_ORIGIN` `https://<uploadsBucket>.s3.<region>.amazonaws.com` của `web` |
 | `mediaBucket` | tên bucket | `S3_MEDIA_BUCKET` của `video-service`, `media-worker` |
-| `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_ORIGIN` của `web` |
+| `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_SIGNED_BASE_URL` `https://<mediaDomain>` của `video-service` (URL đã ký của segment premium), `MEDIA_ORIGIN` của `web` |
 | `kafkaBrokers` | chuỗi `host:9096,host:9096,…`, một mục mỗi broker, không khoảng trắng (bootstrap SCRAM của MSK) | `KAFKA_BROKERS` của `user-service`, `video-service`, `engagement-service`, `feed-service`, `media-worker`; `kafka.brokers` của `svp-data` (Job `kafka-init`, `svp-ops`); `SVP_OTELCOL_KAFKA_BROKERS` của `otel-collector` |
 | `valkeyHost` | tên miền, không cổng (primary endpoint của ElastiCache) | `externalSecrets.valkey` (`<valkeyHost>:6379`, host của `REDIS_URL`) của `svp-cluster`; `valkey.host` của `svp-data` (`svp-ops`) |
 | `s3Cidrs` | danh sách CIDR | `externalPeers.s3` (cổng 443, cùng agent Pod Identity) của `video-service`, `media-worker` |

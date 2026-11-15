@@ -16,6 +16,8 @@ env:
   S3_ENDPOINT: http://s3.svp-data:9000
   S3_PUBLIC_ENDPOINT: https://s3.svp.localhost:8443
   S3_ACCESS_KEY_ID: svp-video-service
+  # No CDN in front of the in-cluster store: premium segments get presigned GETs on S3_PUBLIC_ENDPOINT instead.
+  MEDIA_SIGNER: s3
   PYROSCOPE_SERVER_ADDRESS: http://pyroscope.svp-obs:4040
   SENTRY_ENVIRONMENT: k3d
 # SENTRY_DSN from Secret sentry (errors to GlitchTip in svp-obs).

@@ -55,6 +55,9 @@ externalSecrets:
   enabled: true
   store: aws
   argocdNotifications: true
+  # MEDIA_SIGNING_KEY_ID and MEDIA_SIGNING_KEY of Secret video-service-env, the key that signs premium media URLs, from
+  # entry media-signing: written only by aws/scripts/media-signing-key.sh activate of svp-infra, not make eks-secrets.
+  mediaSigning: true
   # Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose users Terraform makes and whose certificates chain to a
   # public CA: none of the Secrets only an in-cluster broker and Valkey need (the users the init Job creates, the ACL
   # file, the local CA and its server certificates).
