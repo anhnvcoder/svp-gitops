@@ -13,8 +13,8 @@ env:
   KAFKA_BROKERS: kafka.svp-data.svc.cluster.local:9096
   # Most Postgres connections the process opens, those still being dialed included: half for GetStats, half for likes
   # and the views consumer, so GetStats calls the gateway cancels after 100 ms, whose connections pgx closes and dials
-  # again, never take a connection a like needs. Set here because pgx's own default, max(4, NumCPU) per pool, changes
-  # with the node.
+  # again, never take a connection a like needs. The same as pgpool's fixed default, written out so that the total the
+  # two halves split is read beside the split; the overlays of stg and prd set their own.
   DATABASE_MAX_CONNS: "10"
   PYROSCOPE_SERVER_ADDRESS: http://pyroscope.svp-obs:4040
   SENTRY_ENVIRONMENT: k3d

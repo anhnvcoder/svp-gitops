@@ -797,9 +797,8 @@ Values của k3d ở `base/`, khác biệt của EKS ở `platforms/eks/` (đư�
   `svp-cluster`), nên không pod nào lên node trước khi mesh chuyển được lưu lượng của nó, và pod không bao giờ chạy
   ngoài mesh. Node k3d có trước Istio, không mang taint. Trên EKS, mọi release của chart `svp-service` mang
   `nodeAffinity` `karpenter.sh/nodepool` Exists (`platforms/eks/<release>.yaml`): pod chỉ lên node Karpenter, node group
-  `system` không taint không nhận pod ứng dụng Pod proxy của
-  Envoy Gateway (namespace `envoy-gateway-system`) vào mesh bằng nhãn và theo cùng luật: `envoy.nodeAffinity` ở
-  `platforms/eks/svp-cluster.yaml`.
+  `system` không taint không nhận pod ứng dụng. Pod proxy của Envoy Gateway (namespace `envoy-gateway-system`) vào
+  mesh bằng nhãn và theo cùng luật: `envoy.nodeAffinity` ở `platforms/eks/svp-cluster.yaml`.
 - **meshConfig** của `istiod`: `defaultHttpRetryPolicy.attempts: 0`, waypoint không retry (client gRPC của gateway tự
   retry method idempotent; hai lớp retry nhân số lời gọi của một request); `enableTracing: false`, span do service phát
   qua OpenTelemetry, waypoint chỉ chuyển header; `accessLogFile: ""`, không access log, service đã log mọi request.
@@ -1114,10 +1113,11 @@ khai. Mỗi mục của `probes` thành một `Probe`, nên thêm đích là th�
 Mọi module HTTP chỉ đạt khi server trả `200` ngay lần đầu, không theo redirect, qua IPv4, với `User-Agent: svp-uptime-probe`. Hai nền
 tảng khác nhau ở cách kiểm HTTPS:
 
-- **k3d** (`http_local_web`, `http_local_api`, `http_local_media`): `Host` và SNI chọn listener của Gateway svp (`svp.localhost`,
-  `api.svp.localhost`, `s3.svp.localhost`), `fail_if_not_ssl: true`, `insecure_skip_verify: true`. Lý do: cert của listener do
-  cert-manager ký bằng CA `svp-ca` sinh trong cluster, còn `svp-obs` không có bản CA đó, nên chuỗi không kiểm được. Blackbox vẫn đọc
-  cert peer, nên `probe_ssl_earliest_cert_expiry` có. Cái giá: probe k3d không kiểm chuỗi tin cậy.
+- **k3d** (`http_local_web`, `http_local_api`, `http_local_media`): `Host` và SNI chọn listener của Gateway svp
+  (`svp.localhost`, `api.svp.localhost`, `s3.svp.localhost`), `fail_if_not_ssl: true`, `insecure_skip_verify: true`. Lý
+  do: cert của listener do cert-manager ký qua ClusterIssuer `svp-ca` bằng CA `svp-local-ca` sinh trong cluster, còn
+  `svp-obs` không có bản CA đó, nên chuỗi không kiểm được. Blackbox vẫn đọc cert peer, nên
+  `probe_ssl_earliest_cert_expiry` có. Cái giá: probe k3d không kiểm chuỗi tin cậy.
 - **eks** (`http_public`): kiểm HTTPS bằng CA hệ thống, như trình duyệt, qua đường thật: DNS công khai, CloudFront (WAF), ALB, Envoy.
   Module `dns_web`, `dns_api`, `dns_media` là probe DNS: hỏi `kube-dns` và thất bại khi câu trả lời không có bản ghi A, nên tên miền
   bị gỡ khỏi DNS công khai cũng báo mất.
@@ -1276,8 +1276,8 @@ có OpenCost, nên dashboard trống ở đó.
 
 ```mermaid
 flowchart LR
-  kps["Prometheus, kps-prometheus (k3d)"] -- "truy vấn" --> ocost["opencost (svp-obs)"]
-  amp[("AMP workspace (eks)")] -- "truy vấn, SigV4 qua sigv4proxy" --> ocost
+  ocost["opencost (svp-obs)"] -- "truy vấn" --> kps["Prometheus, kps-prometheus (k3d)"]
+  ocost -- "truy vấn, SigV4 qua sigv4proxy" --> amp[("AMP workspace (eks)")]
   ocost -- "metric :9003, ServiceMonitor" --> prom["Prometheus, agent trên eks"]
   pricing[("bảng giá AWS công khai")] -- "tải" --> ocost
 ```

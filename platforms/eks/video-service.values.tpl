@@ -9,9 +9,7 @@ env:
   S3_UPLOADS_BUCKET: {{ $c.uploadsBucket | quote }}
   S3_MEDIA_BUCKET: {{ $c.mediaBucket | quote }}
   KAFKA_BROKERS: {{ $c.kafkaBrokers | quote }}
-  # Premium segments get CloudFront signed URLs on the media distribution, the host gateway's MEDIA_PUBLIC_BASE_URL
-  # names too; the key pair id and private key come from Secret video-service-env.
-  MEDIA_SIGNER: cloudfront
+  # The media distribution, the host gateway's MEDIA_PUBLIC_BASE_URL names too, on which premium segments are signed.
   MEDIA_SIGNED_BASE_URL: {{ printf "https://%s" $c.mediaDomain | quote }}
 # Egress by address instead of the in-cluster pods: RDS and MSK in the database subnets on 5432 and 9096; S3's ranges
 # of the region on 443, and the EKS Pod Identity agent on the node, where the pod gets its role's credentials.
