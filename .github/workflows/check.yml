@@ -1,5 +1,5 @@
 # Checks every pull request and push to main with deploy/ci/gitops-check.sh of the code repository at the checker
-# release CHECKER_VERSION: the commit CHECKER_COMMIT of its tag gitops-check-v<version>, which each job checks first.
+# release CHECKER_VERSION, commit CHECKER_COMMIT of tag gitops-check-v<version>: gitops, diff-preview check it first.
 # A pull request here changes what checks it only by changing this file, which has a code owner.
 # Job gitops-ok is the only check the ruleset of main requires.
 # Public repository, a fork's pull request runs this file with the fork's tree, so:

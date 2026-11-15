@@ -57,7 +57,7 @@ make docs-check
 base/                       values gốc của mọi môi trường; đường dev (make k8s-up của repo code) chỉ đọc lớp này
   <component>.yaml          values của chart upstream (cả argo-rollouts-amd64.yaml theo kiến trúc node)
   argo-cd.yaml              values của chính Argo CD
-  services/<svc>.yaml       values của 7 release chart svp-service, không có khối image
+  services/<svc>.yaml       values của mỗi release chart svp-service, không có khối image
 platforms/<platform>/       k3d và eks: khác biệt của nền tảng (mục Lớp nền tảng)
   README.md                 nền tảng là gì
   <component>.yaml          values giống nhau trên mọi cluster của nền tảng
@@ -68,7 +68,7 @@ envs/<env>/                 stg và prd
   svp-policy.yaml           bật kiểm build provenance của Kyverno (requireProvenance: true)
   charts.yaml               commit của repo code mà chart của env chạy, cùng hai giá trị dẫn xuất từ commit đó;
                             prd thêm gitopsRevision, commit của repo này mà prd chạy (mục Root hai tầng và bootstrap)
-  images/<svc>.yaml         7 file, mỗi file chỉ khối image (repository, tag, digest) của bản phát hành
+  images/<svc>.yaml         một file mỗi release, chỉ khối image (repository, tag, digest) của bản phát hành
 argocd/
   project.yaml              AppProject svp và default (đã khoá)
   bootstrap.json            chart Argo CD: repo, chart, version, values (base/argo-cd.yaml)
@@ -90,8 +90,9 @@ Thứ tự ghép values của một Application: `values.yaml` của chart → `
 nguồn `ref: values` ở revision của chart `argocd/apps`; overlay, file image (nội dung tầng 1 đọc ở revision root theo dõi) và phần mẫu sinh ra
 gộp theo đúng thứ tự đó vào `helm.valuesObject`, Argo CD đọc sau mọi file values. Root từ chối lúc render (Argo CD báo `ComparisonError` trên root): tầng 1 khi env không có thư mục, thiếu `charts.yaml` hay có khoá
 khác ba khoá của nó (cộng `gitopsRevision` 40 hex), file không phải map YAML, overlay của release `svp-service` có `image`, `canary`,
-`httpRoute.name`, file `images/` có khoá ngoài `image`; tầng 2 khi overlay không trùng tên component, thiếu một trong 7 file `images/`, giá trị
-của `charts.yaml` sai dạng, `platform` không đặt hay khác `k3d`, `eks`, trường `platforms` của
+`httpRoute.name`, file `images/` có khoá ngoài `image`; tầng 2 khi overlay không trùng tên component, thiếu file
+`images/` của một release `svp-service`, giá trị của `charts.yaml` sai dạng, `platform` không đặt hay khác `k3d`, `eks`,
+trường `platforms` của
 `components.json` sai, file của nền tảng không trùng component chạy trên nền tảng đó, không phải map YAML hay đặt `cluster`, file hay mẫu của
 release `svp-service` có `image`, `canary`, `httpRoute.name`, `cluster` thiếu khoá hay sai dạng (mục dưới). `charts` là tên dành riêng,
 không component nào được mang.
@@ -201,7 +202,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `vpcCidr` | CIDR | `nodeSubnet` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `awsEndpointCidrs` của `svp-cluster`, `svp-observability` (NetworkPolicy tới endpoint interface), `externalPeers.s3` (cổng 443, endpoint interface MediaConvert, SQS) của `media-worker`, `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
 | `dbCidrs` | danh sách CIDR | `postgres.external.cidrs`, `kafka.external.cidrs`, `valkey.external.cidrs` của `svp-data`, `postgres.external.cidrs`, `kafka.external.cidrs` của `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service`, `externalPeers.kafka` (cổng 9096) của bốn service đó cùng `media-worker`, `externalPeers.valkey` (cổng 6379) của `gateway`, `feed-service`, `web` |
-| `domain` | tên miền | `dnsNames` `<domain>`, `api.<domain>` của listener `https` và `apexHost`, `wildcardHost` `*.<domain>` (chỉ chart chưa có `listeners` đọc) của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web`; `dns_web`, `dns_api` (probe DNS) của `blackbox-exporter-public` (eks) |
+| `domain` | tên miền | `dnsNames` `<domain>`, `api.<domain>` của listener `https` và `apexHost`, `wildcardHost` `*.<domain>` (chỉ chart chưa có `listeners` đọc) của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web`; `dns_web`, `dns_api` (probe DNS) của `blackbox-exporter-public`, probe `http` `web` (`https://<domain>/healthz`), `api` (`https://api.<domain>/readyz`) và probe `dns` `web`, `api` (hai module đó) của `svp-observability` (eks) |
 | `edgeTargetGroupArn` | ARN target group (`arn:aws:elasticloadbalancing:<region>:<account>:targetgroup/<tên>/<id>`) | `envoy.targetGroupArn` (TargetGroupBinding `svp-envoy`) của `svp-cluster` |
 | `edgeCidrs` | danh sách CIDR (subnet edge của ALB internal) | `envoy.networkPolicy.httpsFrom` (cổng 10443, cùng namespace `svp-load`) và `envoy.networkPolicy.healthCheck.from` (cổng 19003) của `svp-cluster` |
 | `rdsAddress` | tên miền | `postgres.external.host` của `svp-data`; `externalSecrets.postgres` (`<rdsAddress>:5432`, host của mọi `DATABASE_URL`) của `svp-cluster` |
@@ -244,12 +245,13 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
 
 ## Promote
 
-- **stg:** tự động. Job `promote` của `images.yml` (repo code, bước shell của workflow) ghi khối `image` của `envs/stg/images/` cho mỗi
-  service vừa ký ở lượt đó (sáu service Go của repo code) và `envs/stg/charts.yaml` (commit của lượt build; lượt có commit là tổ tiên thật
-  của `revision` đang có bị từ chối, nên chart không lùi) trên nhánh `bot/promote-stg`, mở hay cập nhật PR và bật auto-merge. CI của
-  `svp-frontend` làm như vậy cho riêng `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`.
+- **stg:** tự động. Job `promote` của `images.yml` (repo code, bước shell của workflow) ghi khối `image` của
+  `envs/stg/images/` cho mỗi service vừa ký ở lượt đó (mọi service Go của repo code) và `envs/stg/charts.yaml` (commit
+  của lượt build; lượt có commit là tổ tiên thật của `revision` đang có bị từ chối, nên chart không lùi) trên nhánh
+  `bot/promote-stg`, mở hay cập nhật PR và bật auto-merge. CI của `svp-frontend` làm như vậy cho riêng
+  `envs/stg/images/web.yaml` trên nhánh `bot/promote-stg-web`.
 - **prd:** cả bộ. Dispatch promote prd ở repo code (`-f promote_prd=true [-f stg_ref=<main|SHA đủ 40 hex>]`) nhận `stg_ref`, `main` hay
-  một commit trên `main` của repo này, và chép **giá trị khối `image` của cả bảy file `envs/stg/images/` cùng ba khoá của
+  một commit trên `main` của repo này, và chép **giá trị khối `image` của mọi file `envs/stg/images/` cùng ba khoá của
   `envs/stg/charts.yaml`** ở commit đó sang cùng file dưới `envs/prd/` (comment của file prd giữ nguyên), cùng `gitopsRevision: <stg_ref>`
   (commit đủ) trong `envs/prd/charts.yaml`, trên nhánh `bot/promote-prd`; PR không auto-merge. **Bằng chứng stg:** job từ chối `stg_ref` không
   có commit status `argocd/stg` trạng thái `success` (Argo CD Notifications của stg ghi khi mọi Application Healthy ở commit đó), nên prd chỉ
