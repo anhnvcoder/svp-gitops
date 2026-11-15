@@ -783,8 +783,11 @@ nằm trong đích của AppProject `svp`. Thiết kế mesh và lý do ở
 Values của k3d ở `base/`, khác biệt của EKS ở `platforms/eks/` (đường dev chỉ đọc `base/`):
 
 - `profile: ambient` ở `istiod`, `istio-cni`, `ztunnel`: bật ambient và chọn image `distroless`.
-- `global.platform: k3d` ở cả ba (chart `cni` lấy đường CNI của k3s ở `/var/lib/rancher/k3s`; hai chart kia chỉ ghi cùng
-  khoá đó, tài liệu cài của Istio đòi ba chart cùng giá trị). EKS không có profile nền tảng nào của chart:
+- `global.platform: k3s` ở cả ba (chart `cni` lấy đường CNI của k3s: config ở
+  `/var/lib/rancher/k3s/agent/etc/cni/net.d`, binary ở `/var/lib/rancher/k3s/data/cni`, nơi containerd của k3s tìm
+  plugin; hai chart kia chỉ ghi cùng khoá đó, tài liệu cài của Istio đòi ba chart cùng giá trị). Profile `k3d` mà
+  trang k3d của Istio nêu đặt binary ở `/bin`, k3s không tìm ở đó: pod không tạo được sandbox. EKS không có profile
+  nền tảng nào của chart:
   `platforms/eks/` đặt rỗng, chart `cni` dùng đường mặc định `/etc/cni/net.d`, `/opt/cni/bin` của VPC CNI.
 - `base.validationFailurePolicy: Fail` ở `istio-base`, `istiod`: webhook kiểm object Istio đóng khi istiod không trả
   lời, không nhận object chưa kiểm. Chart render sẵn `Fail`, nên istiod chỉ còn vá `caBundle` (xem [`ignoreDifferences`
