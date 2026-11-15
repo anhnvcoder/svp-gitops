@@ -1,0 +1,8 @@
+# The release image of dlq-replay in stg, nothing else: the release on GHCR that CI of
+# https://github.com/anhnvcoder/svp-backend built, scanned and signed (.github/workflows/images.yml there). The tag
+# names the commit for people; the cluster pulls the digest. Its configuration is base/services/dlq-replay.yaml and
+# envs/stg/dlq-replay.yaml when there is one.
+image:
+  repository: ghcr.io/anhnvcoder/svp-backend/dlq-replay
+  tag: "927dd4e9a808"
+  digest: "sha256:64141966d76b2f7b4eb932098ae09f5f7a52274d1c67725ce3b2be2727ea7812"
