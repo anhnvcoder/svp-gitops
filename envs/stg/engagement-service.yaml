@@ -1,5 +1,10 @@
-# Staging: the GitOps cluster runs as stg. Only the name its errors carry differs from the base values (k3d there, the
-# dev path's): every event in GlitchTip says which environment it came from. Domains, replicas and resources stay as in
-# the base so measurements of this cluster compare with earlier runs.
+# Staging: the GitOps cluster runs as stg. Two values differ from the base values: the name its errors carry (k3d there,
+# the dev path's), so every event in GlitchTip says which environment it came from, and the pool size below. Domains,
+# replicas and resources stay as in the base so measurements of this cluster compare with earlier runs.
 env:
   SENTRY_ENVIRONMENT: stg
+  # Postgres connections per pod, split in half between reads and writes as in the base. Every pod of the four Postgres
+  # services at its most replicas, plus one more in a rollout, times this, plus a reserve, stays within 80% of
+  # max_connections on both Postgres stg runs on: svp-pg of the GitOps cluster, the smaller, and RDS on EKS. Sums:
+  # docs/explanation/capacity.md of the code repository.
+  DATABASE_MAX_CONNS: "6"

@@ -26,6 +26,10 @@ env:
   TRUST_TRACE_CONTEXT: "true"
   PYROSCOPE_SERVER_ADDRESS: http://pyroscope.svp-obs:4040
   SENTRY_ENVIRONMENT: k3d
+  # Requests one pod serves at once before it answers 503: the gateway's own default, the target load of
+  # docs/explanation/capacity.md (code repository) over hpa.maxReplicas below, times the feed's p99 SLO, four times
+  # over. Set here so stg's load test can tune it in sight; work it out again when maxReplicas changes.
+  MAX_IN_FLIGHT: "150"
 # SENTRY_DSN from Secret sentry (errors to GlitchTip in svp-obs).
 errorTracking: true
 # Envoy for the public API, the web client's BFF for the API calls of its pages.
@@ -54,3 +58,6 @@ hpa:
 pdb:
   minAvailable: 1
 spreadAcrossNodes: true
+# On SIGTERM the server stops accepting connections and finishes the requests in flight. 5 s first, as for web, for
+# Envoy and kube-proxy (the web client's calls) to drop the terminating pod from their endpoints.
+preStopSleepSeconds: 5

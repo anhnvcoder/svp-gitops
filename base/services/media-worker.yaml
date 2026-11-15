@@ -23,10 +23,11 @@ scratch:
     mountPath: /tmp
     medium: Memory
     sizeLimit: 16Mi
-# On SIGTERM the worker cancels the job in hand at once (ffmpeg killed, nothing published or committed) and the record
-# goes to whichever worker takes the partition, so waiting longer would not let the job finish: 30 s covers closing
-# the Kafka clients and flushing telemetry.
-terminationGracePeriodSeconds: 30
+# On SIGTERM the worker stops polling and lets the job in hand finish within its drain time (DrainTimeout of the code
+# repository's services/media-worker/internal/worker), past which it cancels the job and the record goes to whichever
+# worker takes the partition; 30 s more close the Kafka clients and flush telemetry. Stays under the NodePool's
+# terminationGracePeriod (platforms/eks/svp-cluster.yaml), past which Karpenter removes the node anyway.
+terminationGracePeriodSeconds: 570
 # Reached by no pod (threat model FF-5); reaches Kafka, the object store and the Collector only, never the internet,
 # the gateway or a gRPC service.
 ingressFrom: []
