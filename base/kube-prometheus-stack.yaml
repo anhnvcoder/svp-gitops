@@ -260,7 +260,7 @@ grafana:
   image:
     registry: docker.io
     repository: grafana/grafana
-    tag: 13.3.0-distroless@sha256:540b8afb775bf34aefce417e4329039daa5d44b6f2fbda6881397b1b247ca7df
+    tag: 13.3.1-distroless@sha256:54e297ac67e2b72572f926892f4e06074dc4f79f2a56ed9a9ca9a88a46f28733
   # Login only (threat model OPS-2): the admin user and password come from Secret grafana-admin, which
   # deploy/k8s/secrets.sh writes from .env (SVP_GRAFANA_ADMIN_PASSWORD). Grafana has no route from outside the
   # cluster either: make k8s-ui-grafana port-forwards it to 127.0.0.1:3000.
