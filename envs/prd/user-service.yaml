@@ -4,6 +4,10 @@
 # the three nodes.
 env:
   SENTRY_ENVIRONMENT: prd
+  # Postgres connections per pod, the services' own default, set beside stg's smaller one. Every pod of the four
+  # Postgres services at its most replicas, plus one more in a rollout, times this, plus a reserve, stays within 80% of
+  # max_connections of prd's RDS instance. Sums: docs/explanation/capacity.md of the code repository.
+  DATABASE_MAX_CONNS: "10"
 replicas: 2
 pdb:
   minAvailable: 1
