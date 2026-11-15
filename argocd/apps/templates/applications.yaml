@@ -15,9 +15,9 @@ repositories are written oci://<registry>/<path> in components.json; Argo CD wan
 {{- /* Every targetRevision is quoted: a branch named 2026 or true, or a chart version such as 1.10, would otherwise be
 read as a number or a boolean (1.10 as 1.1), and the Application CRD wants a string. */}}
 
-{{- /* canaryRoute names the HTTPRoute of a release of chart svp-service with canary set in its values file, which the
-chart cannot read: the two are kept in step by hand, and the dev path refuses a release whose values set canary without
-a canaryRoute here, or the reverse. */}}
+{{- /* canaryRoute names the route of a release of chart svp-service with canary set in its values file, which the
+chart cannot read: the HTTPRoute of a release with httpRoute.host, the GRPCRoute of a gRPC one. The two are kept in step
+by hand, and the dev path refuses a release whose values set canary without a canaryRoute here, or the reverse. */}}
 
 {{- /* archValues: Argo Rollouts' Gateway API plugin is a native binary, so the nodes of a Linux x86_64 host need
 another values file than those of a Mac. gitopsOnly: External Secrets Operator builds the Secrets here from the
@@ -335,9 +335,9 @@ spec:
     {{- end }}
   {{- if .canaryRoute }}
   # Argo Rollouts writes into two objects of a release with a canary: its Gateway API plugin moves the weights of the
-  # two backendRefs of the release's HTTPRoute during a canary, then puts them back to 100/0, and the controller adds
-  # rollouts-pod-template-hash to the selectors of Services <release> and <release>-canary. Ignored here, selfHeal does
-  # not set the weights back in the middle of a canary.
+  # two backendRefs of the release's route (HTTPRoute or GRPCRoute, by that name) during a canary, then puts them back
+  # to 100/0, and the controller adds rollouts-pod-template-hash to the selectors of Services <release> and
+  # <release>-canary. Ignored here, selfHeal does not set the weights back in the middle of a canary.
 
   # The price (normalizeTargetResources of Argo CD): the live values reach the applied manifest through a JSON merge
   # patch, which replaces a list whole, so the whole spec.rules of the live route is applied, not only its weights. A
@@ -350,11 +350,33 @@ spec:
       namespace: {{ .namespace }}
       jqPathExpressions:
         - .spec.rules[].backendRefs[].weight
+    - group: gateway.networking.k8s.io
+      kind: GRPCRoute
+      name: {{ .canaryRoute }}
+      namespace: {{ .namespace }}
+      jqPathExpressions:
+        - .spec.rules[].backendRefs[].weight
     - group: ""
       kind: Service
       namespace: {{ .namespace }}
       jqPathExpressions:
         - .spec.selector["rollouts-pod-template-hash"]
+  {{- else if has .name (list "istio-base" "istiod") }}
+  # istiod writes its CA into the caBundle of the webhooks these charts render (failurePolicy is already the Fail it
+  # would set, base.validationFailurePolicy of their values): ignored here, a sync does not empty it again.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: {{ ternary "istiod-default-validator" "istio-validator-istio-system" (eq .name "istio-base") }}
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    {{- if eq .name "istiod" }}
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: istio-sidecar-injector
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    {{- end }}
   {{- end }}
   syncPolicy:
     automated:
@@ -398,6 +420,10 @@ spec:
       # with --force-conflicts, so without it every sync of this Application (a new release digest) would strip the hash
       # from both selectors, sending each request to stable and canary pods alike until the controller sets it again,
       # and reset the weights.
+      - RespectIgnoreDifferences=true
+      {{- else if has .name (list "istio-base" "istiod") }}
+      # The validating webhooks render caBundle "": without it a sync would apply that over istiod's CA, and the API
+      # server would refuse every Istio object (failurePolicy Fail) until istiod patches it again.
       - RespectIgnoreDifferences=true
       {{- end }}
     # An automated sync that failed is not tried again for the same revision unless retries are set. On a new

@@ -1,0 +1,20 @@
+# Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts cni 1.32.0), release istio-cni in namespace
+# istio-system, wave 4 of argocd/apps/components.json: the node agent that sends the traffic of every pod of the mesh
+# to ztunnel in the pod's network namespace. Root with NET_ADMIN, SYS_ADMIN: only Pod Security privileged admits it.
+# Values of k3d, platforms/eks/istio-cni.yaml the differences on EKS. Design notes: docs/components.md.
+
+profile: ambient
+global:
+  # k3d runs k3s, whose containerd looks for CNI plugins in /var/lib/rancher/k3s/data/cni (k3s cmd/k3s/main.go).
+  # Profile k3s points cniBinDir there; profile k3d, the one Istio's k3d page names, still points at /bin.
+  platform: k3s
+
+image: docker.io/istio/install-cni:1.32.0-distroless@sha256:bf8fa30fe56fc7209941af23999f1463071b9885c22ec81f5998645718698787
+
+# Requests of the chart's demo profile (files/profile-demo.yaml) for a lab cluster; the limit catches a leak.
+resources:
+  requests:
+    cpu: 10m
+    memory: 40Mi
+  limits:
+    memory: 256Mi

@@ -1,3 +1,10 @@
 # Platform eks: Kafka is Amazon MSK and Valkey Amazon ElastiCache, whose certificates chain to a public CA among the
 # system's roots, so the lab cluster's local CA (the chart's localCA) is not mounted.
 localCA: ""
+# Only on Karpenter's nodes, which start tainted until Istio's CNI agent runs there, so no pod starts outside the mesh;
+# the system node group, which has no such taint, takes none of them.
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - {key: karpenter.sh/nodepool, operator: Exists}

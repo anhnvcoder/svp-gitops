@@ -18,6 +18,13 @@ args: [mediaconvert]
 resources:
   requests: {cpu: 50m, memory: 64Mi}
   limits: {cpu: 500m, memory: 256Mi}
+# Only on Karpenter's nodes, which start tainted until Istio's CNI agent runs there, so no pod starts outside the mesh;
+# the system node group, which has no such taint, takes none of them.
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - {key: karpenter.sh/nodepool, operator: Exists}
 # The base's scratch stays: the bridge keeps the small files of a try under /work (WORK_DIR) on the read-only root.
 # scratch: null would drop /work with the whole map, and an entry such as tmp cannot be dropped alone, since the chart's
 # values.yaml has no such key (and its schema refuses null there).

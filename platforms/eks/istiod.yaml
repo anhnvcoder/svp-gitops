@@ -1,0 +1,26 @@
+# Platform eks: istiod in high availability, with the chart's own requests. Every new workload certificate and the
+# waypoint's and ztunnel's configuration come from it, so a node drained or a zone lost keeps one replica serving.
+# Design notes: docs/components.md.
+
+# No platform profile of the chart fits EKS: the chart's defaults (CNI paths /etc/cni/net.d, /opt/cni/bin) are its.
+global:
+  platform: ""
+
+# Two fixed replicas, no HPA; above one the chart also makes PodDisruptionBudget istiod (minAvailable 1).
+replicaCount: 2
+# Over the zones first; ScheduleAnyway, so a full zone puts the replica in another one rather than leave it Pending.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: istiod
+# The chart's requests ("a small pilot install"); the limit equals the request, so the control plane's memory is never
+# overcommitted on its node.
+resources:
+  requests:
+    cpu: 500m
+    memory: 2048Mi
+  limits:
+    memory: 2048Mi

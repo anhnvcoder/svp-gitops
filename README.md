@@ -150,7 +150,9 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
 - `platforms/eks/`: Secret từ AWS Secrets Manager với store `aws` của External Secrets ở mọi env (entry `svp/<env>/<entry>`, region và role
   IAM mỗi namespace từ `cluster`; chart `svp-cluster` mở cho controller cổng 443 ra ngoài và agent Pod Identity), node của workload do
   Karpenter cấp (NodePool `default` của `svp-cluster`, giá trị prd ở đây; phần stg giảm ở `envs/stg/svp-cluster.yaml`),
-  Kyverno 3 replica trải zone (`kyverno.yaml`), Postgres `external` (RDS, chuỗi kết nối tới địa chỉ instance với `sslmode=verify-full`,
+  Kyverno 3 replica trải zone (`kyverno.yaml`), istiod 2 replica trải zone và waypoint 2 replica, cả hai có PodDisruptionBudget
+  (`istiod.yaml`, `svp-cluster.yaml`), Istio không profile nền tảng (`istio-cni.yaml`: đường CNI mặc định của VPC CNI),
+  Postgres `external` (RDS, chuỗi kết nối tới địa chỉ instance với `sslmode=verify-full`,
   Secret `rds-ca` từ bundle CA của RDS, `localCA: rds-ca` của bốn service có Postgres), object store `external` (S3 virtual-hosted,
   credential Pod Identity), Kafka `external` (Amazon MSK: Job
   `kafka-init` của `svp-data` chỉ tạo topic và ACL, user do Terraform gắn), Valkey `external` (ElastiCache: host của `REDIS_URL` là

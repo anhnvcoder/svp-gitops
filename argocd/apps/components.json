@@ -124,6 +124,15 @@
       "values": "base/kyverno.yaml"
     },
     {
+      "name": "istio-base",
+      "namespace": "istio-system",
+      "wave": 2,
+      "repo": "https://blob.istio.io/istio-release/charts",
+      "chart": "base",
+      "version": "1.32.0",
+      "values": "base/istio-base.yaml"
+    },
+    {
       "name": "kube-prometheus-stack",
       "namespace": "svp-obs",
       "wave": 3,
@@ -208,10 +217,37 @@
       ]
     },
     {
+      "name": "istiod",
+      "namespace": "istio-system",
+      "wave": 3,
+      "repo": "https://blob.istio.io/istio-release/charts",
+      "chart": "istiod",
+      "version": "1.32.0",
+      "values": "base/istiod.yaml"
+    },
+    {
       "name": "svp-data",
       "namespace": "svp-data",
       "wave": 4,
       "path": "deploy/helm/svp-data"
+    },
+    {
+      "name": "istio-cni",
+      "namespace": "istio-system",
+      "wave": 4,
+      "repo": "https://blob.istio.io/istio-release/charts",
+      "chart": "cni",
+      "version": "1.32.0",
+      "values": "base/istio-cni.yaml"
+    },
+    {
+      "name": "ztunnel",
+      "namespace": "istio-system",
+      "wave": 4,
+      "repo": "https://blob.istio.io/istio-release/charts",
+      "chart": "ztunnel",
+      "version": "1.32.0",
+      "values": "base/ztunnel.yaml"
     },
     {
       "name": "blackbox-exporter",

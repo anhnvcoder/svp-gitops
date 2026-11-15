@@ -18,10 +18,13 @@ kubeAPIPort: 443
 kyverno:
   vxlanAddresses: []
 
-# The namespaces of the platform charts that run here, made before their chart with Pod Security "restricted": the
+# The namespaces of the platform charts that run here, made before their chart with their Pod Security level: the
 # base's without cnpg-system (no CloudNativePG on EKS). A list replaces the base's whole, so every one is named. AWS
 # Load Balancer Controller runs in kube-system, which this chart never labels.
 platformNamespaces:
+  # ztunnel and istio-cni change the network of the node and its pods: only privileged admits them.
+  - name: istio-system
+    podSecurity: privileged
   - name: argo-rollouts
   - name: keda
   - name: kyverno
@@ -38,6 +41,13 @@ envoy:
     # TargetGroupBinding svp-envoy (targetGroupArn, from the template), which points at this fixed name.
     type: ClusterIP
     name: svp-envoy
+  # Only on Karpenter's nodes, which start tainted until Istio's CNI agent runs there, so no Envoy pod starts outside
+  # the mesh; the system node group, which has no such taint, takes none of them.
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - {key: karpenter.sh/nodepool, operator: Exists}
   # Only the ALB (from the edge subnets) and the in-cluster load test reach 10443, only the ALB the health check port;
   # metrics from svp-obs. The sources come from the template.
   networkPolicy:
@@ -46,6 +56,11 @@ envoy:
     # sending new requests to a pod that is shutting down.
     healthCheck:
       port: 19003
+
+# Every call to a gRPC service goes through the waypoint: two replicas, which also get a PodDisruptionBudget, so a
+# drained node or a lost zone keeps one serving.
+waypoint:
+  replicas: 2
 
 # The Secrets come from AWS Secrets Manager through External Secrets Operator, entry svp/<env>/<entry>, written by `make
 # eks-secrets`. Each namespace's store assumes a role of its own, allowed GetSecretValue on the entries that namespace

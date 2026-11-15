@@ -1,0 +1,58 @@
+# Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts istiod 1.32.0), release istiod in namespace
+# istio-system, wave 3 of argocd/apps/components.json: the control plane of the ambient mesh (certificates of the
+# workloads, xDS of ztunnel and of the waypoint, the waypoint's Deployment from Gateway waypoint of chart svp-cluster).
+# Values of k3d; platforms/eks/istiod.yaml holds what differs on EKS. Design notes: docs/components.md.
+
+profile: ambient
+global:
+  # Sets only the CNI paths of k3s in this chart; kept equal to istio-cni's and ztunnel's, as Istio's install asks.
+  platform: k3s
+  # The waypoint's istio-proxy runs global.proxy.image as written, so it is pinned here: istiod makes that pod at
+  # run time, no render shows it. proxy_init (sidecars only, unused in ambient) is pinned the same.
+  proxy:
+    image: docker.io/istio/proxyv2:1.32.0-distroless@sha256:9cd1f1cc261f3fe250ab483543e7256c39d5871eae5f1817c0809eff09e365d4
+  proxy_init:
+    image: docker.io/istio/proxyv2:1.32.0-distroless@sha256:9cd1f1cc261f3fe250ab483543e7256c39d5871eae5f1817c0809eff09e365d4
+
+base:
+  # Fail closed, as in base/istio-base.yaml: istiod then only patches the caBundle of its validating webhook.
+  validationFailurePolicy: Fail
+
+image: docker.io/istio/pilot:1.32.0-distroless@sha256:219ab7efcf1fd1f883086ad4a4a649c0e70bee3200423d6eef9f435103a79423
+
+# The chart already drops all capabilities and runs istiod non-root; only the seccomp profile is missing for Pod
+# Security restricted. istiod holds the mesh CA key, so it gets none of the privileges only ztunnel and istio-cni need.
+seccompProfile:
+  type: RuntimeDefault
+
+# One replica, no HPA, no PodDisruptionBudget (the chart makes one only above one replica): a lab cluster. Requests of
+# the chart's demo profile (files/profile-demo.yaml), not its 2 GiB sized for large meshes; the limit catches a leak.
+autoscaleEnabled: false
+replicaCount: 1
+resources:
+  requests:
+    cpu: 10m
+    memory: 100Mi
+  limits:
+    memory: 512Mi
+
+# Removes taint cni.istio.io/not-ready from a node once istio-cni and ztunnel are Ready there. Nodes that start with
+# that taint (Karpenter's on EKS) take no pod before the mesh redirects its traffic; on k3d no node carries it.
+taint:
+  enabled: true
+
+meshConfig:
+  # No retry in the waypoint: the gateway's gRPC clients retry the idempotent methods themselves, and two layers of
+  # retries would multiply the calls of one request.
+  defaultHttpRetryPolicy:
+    attempts: 0
+  # The services emit their spans through OpenTelemetry; the waypoint only passes the trace headers on.
+  enableTracing: false
+  # No access log: the services log every request already.
+  accessLogFile: ""
+
+sidecarInjectorWebhook:
+  templates:
+    # Replaces the chart's sidecar template grpc-simple, which pulls busybox:1.28 unpinned. No pod here asks for it
+    # (annotation inject.istio.io/templates, sidecar injection only), and an empty template parses.
+    grpc-simple: ""

@@ -20,6 +20,7 @@ thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argoc
 - [Reloader](#reloader)
 - [Argo Rollouts](#argo-rollouts)
 - [Kyverno](#kyverno)
+- [Istio](#istio)
 - [KEDA](#keda)
 - [kube-prometheus-stack](#kube-prometheus-stack)
 - [ACK prometheusservice controller](#ack-prometheusservice-controller)
@@ -233,8 +234,9 @@ từ đó, nên hai đường cài cùng chart, version và values theo cùng th
   `oci://<registry>/<path>` trong `components.json`, dạng `helm` nhận; Argo CD muốn chúng không có scheme;
 - mọi `targetRevision` được đặt trong dấu nháy: nhánh tên `2026` hay `true`, hay version chart như `1.10`, nếu không sẽ bị đọc thành số
   hay boolean (`1.10` thành `1.1`), mà CRD Application muốn một chuỗi;
-- `canaryRoute` nêu HTTPRoute của một release chart `svp-service` có `canary` trong file values của nó (`api` của gateway, `web` của web
-  client): release như vậy nhận `ignoreDifferences` ở dưới. Chart không đọc được file values đó từ đây, nên hai nơi được giữ khớp bằng tay,
+- `canaryRoute` nêu route của một release chart `svp-service` có `canary` trong file values của nó: HTTPRoute của release có
+  `httpRoute.host` (`api` của gateway, `web` của web client), GRPCRoute của release gRPC: release như vậy nhận
+  `ignoreDifferences` ở dưới. Chart không đọc được file values đó từ đây, nên hai nơi được giữ khớp bằng tay,
   và đường dev từ chối release có values đặt `canary` mà không có `canaryRoute` ở đây, hay ngược lại;
 - `archValues` ánh xạ một kiến trúc node tới thêm một file values, đọc sau `values` trên cluster có node chạy kiến trúc đó (value
   `nodeArch`): plugin Gateway API của Argo Rollouts là binary gốc mà controller tải và chạy, nên node của máy Linux x86_64 cần file khác
@@ -282,8 +284,9 @@ rỗng trong hostname hay CIDR.
 
 ### `ignoreDifferences` của canary
 
-Argo Rollouts ghi vào hai object của một release có canary: plugin Gateway API của nó dời weight của hai `backendRefs` của HTTPRoute của
-release trong lúc canary, rồi đặt lại 100/0, và controller thêm `rollouts-pod-template-hash` vào selector của các Service `<release>` và
+Argo Rollouts ghi vào hai object của một release có canary: plugin Gateway API của nó dời weight của hai `backendRefs` của route của
+release (HTTPRoute hay GRPCRoute tên `canaryRoute`; Application bỏ qua weight của cả hai kind) trong lúc canary, rồi
+đặt lại 100/0, và controller thêm `rollouts-pod-template-hash` vào selector của các Service `<release>` và
 `<release>-canary`. Chúng bị bỏ qua ở đây, `selfHeal` không đặt lại weight giữa chừng canary. `RespectIgnoreDifferences` còn giữ giá trị
 đang chạy khi một sync apply các object này: Argo CD apply theo server-side với `--force-conflicts`, nên không có nó thì mỗi sync của
 Application này (một digest release mới) sẽ gỡ hash khỏi cả hai selector, gửi mỗi request tới cả pod stable lẫn canary cho tới khi
@@ -292,8 +295,8 @@ controller đặt lại, và đặt lại weight.
 Cái giá, đọc trong `controller/sync.go` của Argo CD v3.5.5 (`normalizeTargetResources`): giá trị đang chạy tới manifest được apply qua
 JSON merge patch, thay cả một danh sách, nên toàn bộ `spec.rules` của route đang chạy được apply, không chỉ weight. Một thay đổi của rules
 trong git (match, filter, timeout) vì vậy không được apply khi route còn tồn tại: xoá route khi không còn canary nào chạy (`kubectl
---context k3d-svp -n <namespace> delete httproute <canaryRoute>`) và `selfHeal` tạo lại nó từ git trong vài giây, release không vào được
-trong lúc đó.
+--context k3d-svp -n <namespace> delete httproute <canaryRoute>`, `grpcroute` với release gRPC) và `selfHeal` tạo lại
+nó từ git trong vài giây, release không vào được trong lúc đó.
 
 ### Pod Security cho wave 0
 
@@ -327,6 +330,7 @@ Các namespace của dự án và của chart nền tảng, chỉ trên cluster 
 - `external-secrets` giữ External Secrets Operator; `svp-secrets` giữ các Secret nguồn mà store của nó đọc trên cluster lab (không chart
   nào ghi một cái ở đó: chart `svp-cluster` tạo namespace, Role và NetworkPolicy của nó).
 - `reloader` giữ Reloader, mà Role và RoleBinding đi vào `svp`, `svp-data`, `svp-obs` và `keda`, đã có trong danh sách.
+- `istio-system` giữ bốn release Istio, `svp-mesh` waypoint của chart `svp-cluster` (mục [Istio](#istio)).
 
 ### ValidatingAdmissionPolicy và binding
 
@@ -642,11 +646,13 @@ Một controller bị chiếm giữ gì:
   và ServiceAccount của `argo-rollouts`, của chính controller.
 - Ở `svp`: ReplicaSet nó tạo, đổi và xoá, và pod của `svp` nó liệt kê và evict. Đó là việc của mọi workload controller, và nó chạm được cả
   Secret của `svp` (một ReplicaSet mà pod của nó `envFrom` `user-service-env`), như Deployment controller của control plane. Không Secret
-  của namespace nào khác, không pod, Service hay route ngoài `argo-rollouts` và `svp`, không route của `svp` ngoài HTTPRoute `api` và `web`.
+  của namespace nào khác, không pod, Service hay route ngoài `argo-rollouts` và `svp`, không route của `svp` ngoài HTTPRoute `api`, `web` và
+  GRPCRoute tên bốn service gRPC.
 - Cái controller làm ở `svp`, theo từng luật. Bỏ khỏi các luật của chart: Secret (không analysis nào đọc một cái), ConfigMap, Job (job
   metric chạy ở `argo-rollouts`, xem `extraEnv`), Deployment và pod template (không `workloadRef`), cập nhật pod (không metadata canary hay
   stable), tạo và xoá Service (chỉ experiment), ghi trên Ingress, ClusterAnalysisTemplate (controller theo namespace không watch chúng) và
-  mọi traffic provider ngoài HTTPRoute `api` và `web`.
+  mọi traffic provider ngoài HTTPRoute `api`, `web` (qua Envoy) và GRPCRoute `user-service`, `video-service`, `engagement-service`,
+  `feed-service` (qua waypoint của mesh).
 
 ### Canary trên EKS
 
@@ -673,8 +679,8 @@ image. `registry` và `repository` là mặc định của chart viết ra; khô
 Plugin traffic router Gateway API v0.17.0 là binary cho node arm64 (một Mac); trên node amd64, `argo-rollouts-amd64.yaml` thay danh sách
 này bằng asset cùng release dựng cho amd64. Controller tải nó từ GitHub khi khởi động (namespace `argo-rollouts` không chặn egress) và
 từ chối file có sha256 khác; release không công bố file checksum, nên giá trị được tính trên asset đã tải và khớp digest asset mà GitHub
-hiển thị. Nó chạy như tiến trình con của controller, với ServiceAccount của controller: nó `get` và `update` HTTPRoute `api` và `web`
-(Role ở dưới), không gì khác.
+hiển thị. Nó chạy như tiến trình con của controller, với ServiceAccount của controller: nó `get` và `update` HTTPRoute `api`, `web` và
+GRPCRoute của bốn service gRPC (Role ở dưới), không gì khác.
 
 ### `argo-rollouts-amd64.yaml`
 
@@ -749,6 +755,90 @@ kết quả chữ ký tốn 1, một kết quả attestation tốn 1 cộng số
 - 1 MiB giữ được payload của bảy service và hai image diễn tập nhiều lần.
 - Một kết quả khi đó được tin tới 60 phút, nên một attestation cũ hơn 72 giờ chưa tới mức đó, hay Sigstore lỗi sau khi nó đã vào cache,
   vẫn nhận một pod.
+
+## Istio
+
+Istio ambient (bốn chart của `https://blob.istio.io/istio-release/charts`, một version cho cả bốn và mọi image) là
+service mesh của namespace `svp`: mTLS giữa mọi pod, quyền theo ServiceAccount, cân tải và canary gRPC theo request. Cả
+bốn release ở namespace `istio-system`, chạy ở cả hai nền tảng (đường dev và đường GitOps cài cùng thứ); wave của từng
+cái ở `argocd/apps/components.json`:
+
+- `istio-base` (chart `base`): CRD của mesh và webhook kiểm object của chúng, không pod. CRD có trước policy mesh của
+  chart `svp-service`.
+- `istiod` (chart `istiod`): control plane: cert của workload, cấu hình xDS cho ztunnel và waypoint, Deployment của
+  waypoint từ Gateway `waypoint` của chart `svp-cluster`.
+- `istio-cni` (chart `cni`): agent mỗi node chuyển lưu lượng của pod trong mesh tới ztunnel trong network namespace của
+  pod.
+- `ztunnel` (chart `ztunnel`): proxy mỗi node mang mọi kết nối của mesh qua mTLS (HBONE) và thực thi policy L4.
+
+`istio-system` do chart `svp-cluster` (wave 1) tạo với Pod Security `privileged`: ztunnel và istio-cni chạy root với
+`NET_ADMIN`, `SYS_ADMIN` và hostPath của node, không mức nào khác nhận. Pod `istiod` không cần quyền đó: chart đã drop
+ALL capability và chạy non-root, `seccompProfile: RuntimeDefault` ở `base/istiod.yaml` bổ sung phần còn thiếu để pod đạt
+`restricted` (istiod giữ khoá CA của mesh). Namespace `svp-mesh` chỉ giữ waypoint; cả hai
+nằm trong đích của AppProject `svp`. Thiết kế mesh và lý do ở
+[ADR-0075](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0075-service-mesh.md) của repo code.
+
+### Values
+
+Values của k3d ở `base/`, khác biệt của EKS ở `platforms/eks/` (đường dev chỉ đọc `base/`):
+
+- `profile: ambient` ở `istiod`, `istio-cni`, `ztunnel`: bật ambient và chọn image `distroless`.
+- `global.platform: k3s` ở cả ba (chart `cni` lấy đường CNI của k3s: config ở
+  `/var/lib/rancher/k3s/agent/etc/cni/net.d`, binary ở `/var/lib/rancher/k3s/data/cni`, nơi containerd của k3s tìm
+  plugin; hai chart kia chỉ ghi cùng khoá đó, tài liệu cài của Istio đòi ba chart cùng giá trị). Profile `k3d` mà
+  trang k3d của Istio nêu đặt binary ở `/bin`, k3s không tìm ở đó: pod không tạo được sandbox. EKS không có profile
+  nền tảng nào của chart:
+  `platforms/eks/` đặt rỗng, chart `cni` dùng đường mặc định `/etc/cni/net.d`, `/opt/cni/bin` của VPC CNI.
+- `base.validationFailurePolicy: Fail` ở `istio-base`, `istiod`: webhook kiểm object Istio đóng khi istiod không trả
+  lời, không nhận object chưa kiểm. Chart render sẵn `Fail`, nên istiod chỉ còn vá `caBundle` (xem [`ignoreDifferences`
+  của webhook Istio](#ignoredifferences-của-webhook-istio)).
+- `taint.enabled: true` ở `istiod`: untaint controller gỡ taint `cni.istio.io/not-ready` khỏi node khi istio-cni và
+  ztunnel đã Ready ở đó. Node Karpenter dựng trên EKS mang taint đó từ lúc đăng ký (`startupTaints` của NodePool ở chart
+  `svp-cluster`), nên không pod nào lên node trước khi mesh chuyển được lưu lượng của nó, và pod không bao giờ chạy
+  ngoài mesh. Node k3d có trước Istio, không mang taint. Trên EKS, mọi release của chart `svp-service` mang
+  `nodeAffinity` `karpenter.sh/nodepool` Exists (`platforms/eks/<release>.yaml`): pod chỉ lên node Karpenter, node group
+  `system` không taint không nhận pod ứng dụng Pod proxy của
+  Envoy Gateway (namespace `envoy-gateway-system`) vào mesh bằng nhãn và theo cùng luật: `envoy.nodeAffinity` ở
+  `platforms/eks/svp-cluster.yaml`.
+- **meshConfig** của `istiod`: `defaultHttpRetryPolicy.attempts: 0`, waypoint không retry (client gRPC của gateway tự
+  retry method idempotent; hai lớp retry nhân số lời gọi của một request); `enableTracing: false`, span do service phát
+  qua OpenTelemetry, waypoint chỉ chuyển header; `accessLogFile: ""`, không access log, service đã log mọi request.
+
+Tài nguyên: mọi container có requests và limit bộ nhớ, như mọi thành phần khác. k3d lấy requests của profile demo của
+chính chart (`files/profile-demo.yaml`), không phải mặc định cỡ mesh lớn (istiod 2 GiB, ztunnel 512 MiB cho khoảng 200k
+pod); limit bắt rò rỉ. EKS lấy requests mặc định của chart; limit của istiod và ztunnel bằng requests, bộ nhớ của
+control plane và của proxy mang mọi kết nối của node không bị overcommit. istiod trên k3d một replica, không HPA, không
+PodDisruptionBudget (chart chỉ tạo khi trên một replica); trên EKS hai replica cố định, rải theo zone, cùng
+PodDisruptionBudget `istiod` của chart (`minAvailable: 1`). Waypoint hai replica trên EKS qua `waypoint.replicas` của
+`platforms/eks/svp-cluster.yaml`.
+
+Không cái nào phụ thuộc cluster: chart không đòi tên cluster hay mạng cho một cluster đơn, nên không có mẫu
+`*.values.tpl`.
+
+### Image
+
+Mọi image ghim theo digest của multi-arch index, tag `<version>-distroless` cạnh để người đọc (quy ước ở [Ghim image
+theo digest](#ghim-image-theo-digest)); ba chart nhận nguyên ref có `/` trong khoá `image` (helm-values manager của
+Renovate thấy khoá đó):
+
+- `istiod`: `image` (pilot), `global.proxy.image` và `global.proxy_init.image` (proxyv2). Pod waypoint do istiod tạo lúc
+  chạy, không lộ trong render, và chạy nguyên `global.proxy.image`; policy `images-pinned` của check đọc khoá `"image"`
+  của ConfigMap `istio-sidecar-injector` nên vẫn thấy ref đó. `proxy_init` chỉ dùng cho sidecar, ghim cùng.
+- `sidecarInjectorWebhook.templates.grpc-simple: ""` thay template sidecar `grpc-simple` của chart, cái kéo
+  `busybox:1.28` không ghim. Không pod nào ở đây xin nó (annotation `inject.istio.io/templates`, chỉ cho sidecar
+  injection); template rỗng vẫn parse được.
+- `istio-cni`: `image` (install-cni); `ztunnel`: `image` (ztunnel). `istio-base` không có pod.
+
+Renovate gom bốn chart và mọi image Istio vào một pull request (nhóm `istio` của `renovate.json`): mesh chạy một version
+cho mọi chart và image, nên chúng được nâng cùng lúc.
+
+### `ignoreDifferences` của webhook Istio
+
+istiod ghi CA của nó vào `caBundle` của webhook mà hai chart render: `istiod-default-validator` (`istio-base`),
+`istio-validator-istio-system` và `istio-sidecar-injector` (`istiod`). Application của hai component bỏ qua trường đó,
+cùng `RespectIgnoreDifferences`: hai webhook kiểm render `caBundle: ""`, và Argo CD apply theo server-side với
+`--force-conflicts`, nên không có nó thì mỗi sync ghi chuỗi rỗng đè CA, và API server từ chối mọi object Istio
+(`failurePolicy: Fail`) cho tới khi istiod vá lại.
 
 ## KEDA
 

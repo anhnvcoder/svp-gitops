@@ -4,3 +4,10 @@ localCA: ""
 # Listener https of Gateway svp, the only one on this platform: it serves the domain itself too.
 httpRoute:
   sectionName: https
+# Only on Karpenter's nodes, which start tainted until Istio's CNI agent runs there, so no pod starts outside the mesh;
+# the system node group, which has no such taint, takes none of them.
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - {key: karpenter.sh/nodepool, operator: Exists}
