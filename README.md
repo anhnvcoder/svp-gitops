@@ -140,8 +140,8 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   `eks` cả `stg` và `prd`) và `localHosts: true` khi render của nó được nêu tên lab `*.svp.localhost` (chỉ `k3d`; vắng là không được). Root
   chart không đọc khoá này; check của repo code đọc nó (thiếu hay sai dạng là đỏ), job `diff-preview` cũng render theo nó.
 - Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
-  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS), `loki`, `tempo` (log, trace trên EKS vào CloudWatch Logs, X-Ray). Chỉ
-  `eks`: `ack-prometheusservice` (luật và cảnh báo lên AMP), `grafana-operator` (dashboard lên Amazon Managed Grafana), `karpenter` (node cho workload theo pod đang chờ, wave -1
+  `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS), `loki`, `tempo` (log, trace trên EKS vào CloudWatch Logs, X-Ray), `blackbox-exporter` (probe qua Envoy của cluster). Chỉ
+  `eks`: `blackbox-exporter-public` (probe domain công khai), `ack-prometheusservice` (luật và cảnh báo lên AMP), `grafana-operator` (dashboard lên Amazon Managed Grafana), `karpenter` (node cho workload theo pod đang chờ, wave -1
   vì mang CRD của NodePool mà `svp-cluster` render), `aws-load-balancer-controller` (đăng ký pod Envoy vào target group của ALB internal
   qua TargetGroupBinding, wave 1 vì mang CRD của TargetGroupBinding mà `svp-cluster` render). Đường dev (`make k8s-up`) chạy component của
   `k3d`. Không gì trong cluster ghi DNS: bản ghi của env do Terraform của repo hạ tầng tạo.
@@ -193,24 +193,24 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 
 | Khoá | Dạng | Ai dùng (mẫu ở `platforms/eks/`) |
 | --- | --- | --- |
-| `name` | tên cluster EKS | nhãn ngoài `cluster` của Prometheus agent (`kube-prometheus-stack`), `clusterName` của `aws-load-balancer-controller`, `settings.clusterName` và hàng đợi `settings.interruptionQueue` (`<name>-karpenter`) của `karpenter`, `karpenter.clusterName` (role node, tag discovery) của `svp-cluster` |
-| `region` | region AWS | SigV4 của remote write (`kube-prometheus-stack`), `rules.amp.region`, `dashboards.grafana.region` của `svp-observability`, `sigv4Region` của `canaryPrometheus` (`gateway`, `web`), `SVP_OTELCOL_REGION` của `otel-collector`, `region` của LBC, `AWS_REGION` của `karpenter`, `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web` |
+| `name` | tên cluster EKS | nhãn ngoài `cluster` của Prometheus agent (`kube-prometheus-stack`), `clusterName` của `aws-load-balancer-controller`, `settings.clusterName` và hàng đợi `settings.interruptionQueue` (`<name>-karpenter`) của `karpenter`, `karpenter.clusterName` (role node, tag discovery) của `svp-cluster`, `exporter.defaultClusterId` của `opencost` (eks) |
+| `region` | region AWS | SigV4 của remote write (`kube-prometheus-stack`), `rules.amp.region`, `dashboards.grafana.region` của `svp-observability`, `sigv4Region` của `canaryPrometheus` (`gateway`, `web`), `SVP_OTELCOL_REGION` của `otel-collector`, `region` của LBC, `AWS_REGION` của `karpenter`, `externalSecrets.aws.region` của `svp-cluster`, endpoint S3 vùng và `S3_REGION` của `video-service`, `media-worker`, `UPLOAD_ORIGIN` của `web`, `sigV4Proxy.region` của `opencost` (eks) |
 | `vpcId` | `vpc-…` | `vpcId` của LBC (pod không đọc IMDS) |
 | `vpcCidr` | CIDR | `nodeSubnet` của `svp-cluster`, `nodeSubnet` của `svp-observability`, `awsEndpointCidrs` của `svp-cluster`, `svp-observability` (NetworkPolicy tới endpoint interface), `externalPeers.s3` (cổng 443, endpoint interface MediaConvert, SQS) của `media-worker`, `TRUSTED_PROXY_CIDRS` của `gateway` |
 | `serviceCidr` | CIDR, địa chỉ mạng `….0/12`–`/24` | `kubeAPIServiceIP` (địa chỉ `.1`) của `svp-cluster` |
 | `dbCidrs` | danh sách CIDR | `postgres.external.cidrs`, `kafka.external.cidrs`, `valkey.external.cidrs` của `svp-data`, `postgres.external.cidrs`, `kafka.external.cidrs` của `svp-observability`, `externalPeers.postgres` (cổng 5432) của `user-service`, `video-service`, `engagement-service`, `feed-service`, `externalPeers.kafka` (cổng 9096) của bốn service đó cùng `media-worker`, `externalPeers.valkey` (cổng 6379) của `gateway`, `feed-service`, `web` |
-| `domain` | tên miền | `dnsNames` `<domain>`, `api.<domain>` của listener `https` và `apexHost`, `wildcardHost` `*.<domain>` (chỉ chart chưa có `listeners` đọc) của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web` |
+| `domain` | tên miền | `dnsNames` `<domain>`, `api.<domain>` của listener `https` và `apexHost`, `wildcardHost` `*.<domain>` (chỉ chart chưa có `listeners` đọc) của `svp-cluster`; host route `web`, `api.<domain>` của `gateway`; `APP_ORIGIN` của `web`; `dns_web`, `dns_api` (probe DNS) của `blackbox-exporter-public` (eks) |
 | `edgeTargetGroupArn` | ARN target group (`arn:aws:elasticloadbalancing:<region>:<account>:targetgroup/<tên>/<id>`) | `envoy.targetGroupArn` (TargetGroupBinding `svp-envoy`) của `svp-cluster` |
 | `edgeCidrs` | danh sách CIDR (subnet edge của ALB internal) | `envoy.networkPolicy.httpsFrom` (cổng 10443, cùng namespace `svp-load`) và `envoy.networkPolicy.healthCheck.from` (cổng 19003) của `svp-cluster` |
 | `rdsAddress` | tên miền | `postgres.external.host` của `svp-data`; `externalSecrets.postgres` (`<rdsAddress>:5432`, host của mọi `DATABASE_URL`) của `svp-cluster` |
 | `uploadsBucket` | tên bucket | `S3_UPLOADS_BUCKET` của `video-service`, `media-worker`; `UPLOAD_ORIGIN` `https://<uploadsBucket>.s3.<region>.amazonaws.com` của `web` |
 | `mediaBucket` | tên bucket | `S3_MEDIA_BUCKET` của `video-service`, `media-worker` |
-| `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_SIGNED_BASE_URL` `https://<mediaDomain>` của `video-service` (URL đã ký của segment premium), `MEDIA_ORIGIN` của `web` |
+| `mediaDomain` | tên `*.cloudfront.net` | `MEDIA_PUBLIC_BASE_URL` `https://<mediaDomain>` của `gateway` (đường là key, không thêm `/media` như path-style của k3d), `MEDIA_SIGNED_BASE_URL` `https://<mediaDomain>` của `video-service` (URL đã ký của segment premium), `MEDIA_ORIGIN` của `web`; `dns_media` của `blackbox-exporter-public`, probe `media` của `svp-observability` (eks) |
 | `kafkaBrokers` | chuỗi `host:9096,host:9096,…`, một mục mỗi broker, không khoảng trắng (bootstrap SCRAM của MSK) | `KAFKA_BROKERS` của `user-service`, `video-service`, `engagement-service`, `feed-service`, `media-worker`; `kafka.brokers` của `svp-data` (Job `kafka-init`, `svp-ops`); `SVP_OTELCOL_KAFKA_BROKERS` của `otel-collector` |
 | `valkeyHost` | tên miền, không cổng (primary endpoint của ElastiCache) | `externalSecrets.valkey` (`<valkeyHost>:6379`, host của `REDIS_URL`) của `svp-cluster`; `valkey.host` của `svp-data` (`svp-ops`) |
 | `s3Cidrs` | danh sách CIDR | `externalPeers.s3` (cổng 443, cùng agent Pod Identity) của `video-service`, `media-worker` |
 | `ecrRegistry` | host registry ECR (`<account>.dkr.ecr.<region>.amazonaws.com`) | `registryMirror.rules` (đích của sáu tiền tố) và `releaseRegistry` của `svp-policy` |
-| `ampWorkspaceId` | `ws-…` | `rules.amp.workspaceId` của `svp-observability` (workspace mà ACK ghi luật vào) |
+| `ampWorkspaceId` | `ws-…` | `rules.amp.workspaceId` của `svp-observability` (workspace mà ACK ghi luật vào), `amp.workspaceId` của `opencost` (eks) |
 | `ampEndpoint` | `https://aps-workspaces.<region>.amazonaws.com/workspaces/ws-…/`, có `/` cuối | URL remote write của `kube-prometheus-stack` (cộng `api/v1/remote_write`), `SVP_OTELCOL_AMP_ENDPOINT` của `otel-collector`, `dashboards.grafana.ampEndpoint` của `svp-observability`, `address` của `canaryPrometheus` (`gateway`, `web`; bỏ `/` cuối) |
 | `logGroup` | `/svp/<env>/otel` | `SVP_OTELCOL_LOG_GROUP` của `otel-collector` |
 | `grafanaUrl` | `https://g-….grafana-workspace.<region>.amazonaws.com`, không `/` cuối | `dashboards.grafana.url` của `svp-observability` (CR `Grafana` của Grafana Operator) |

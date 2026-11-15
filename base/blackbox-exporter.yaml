@@ -1,0 +1,84 @@
+# blackbox exporter v0.29.1 (chart https://prometheus-community.github.io/helm-charts prometheus-blackbox-exporter
+# 11.21.3), release blackbox-exporter in namespace svp-obs, wave 4 of argocd/apps/components.json, platform k3d only:
+# the uptime probes of the three hosts of Gateway svp, through Service svp-envoy (Probes of chart svp-observability).
+# Platform eks runs release blackbox-exporter-public instead. Design notes: docs/components.md.
+
+# Service blackbox-exporter on 9115 on both platforms, which the Probes and the policies of svp-observability name.
+fullnameOverride: blackbox-exporter
+
+# By digest, the chart's appVersion beside it; compose pins the same digest (deploy/compose/compose.yaml of the code
+# repository).
+image:
+  registry: quay.io
+  repository: prometheus/blackbox-exporter
+  tag: v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+
+# Two replicas over the zones, one down at a time: a probe is never lost to a drain.
+replicas: 2
+podDisruptionBudget:
+  maxUnavailable: 1
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus-blackbox-exporter
+        app.kubernetes.io/instance: blackbox-exporter
+
+# Pod Security "restricted": the chart's container settings and the seccomp profile they leave out.
+securityContext:
+  seccompProfile:
+    type: RuntimeDefault
+# Not measured yet: a few probes every 30 s.
+resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {memory: 128Mi}
+
+# The listeners' certificates are signed by the CA cert-manager makes in the cluster, which has no copy in svp-obs: the
+# chain is not verified, and probe_ssl_earliest_cert_expiry still reads the peer's certificate. SNI and Host pick the
+# listener and route. Only 200 counts, without following redirects; IPv4, where the exporter's default is IPv6.
+config:
+  modules:
+    http_local_web:
+      prober: http
+      timeout: 5s
+      http:
+        preferred_ip_protocol: ip4
+        valid_status_codes: [200]
+        follow_redirects: false
+        fail_if_not_ssl: true
+        headers:
+          Host: svp.localhost
+          User-Agent: svp-uptime-probe
+        tls_config:
+          server_name: svp.localhost
+          insecure_skip_verify: true
+    http_local_api:
+      prober: http
+      timeout: 5s
+      http:
+        preferred_ip_protocol: ip4
+        valid_status_codes: [200]
+        follow_redirects: false
+        fail_if_not_ssl: true
+        headers:
+          Host: api.svp.localhost
+          User-Agent: svp-uptime-probe
+        tls_config:
+          server_name: api.svp.localhost
+          insecure_skip_verify: true
+    http_local_media:
+      prober: http
+      timeout: 5s
+      http:
+        preferred_ip_protocol: ip4
+        valid_status_codes: [200]
+        follow_redirects: false
+        fail_if_not_ssl: true
+        headers:
+          Host: s3.svp.localhost
+          User-Agent: svp-uptime-probe
+        tls_config:
+          server_name: s3.svp.localhost
+          insecure_skip_verify: true

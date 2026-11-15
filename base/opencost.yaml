@@ -1,0 +1,67 @@
+# OpenCost 1.121.4 (chart https://opencost.github.io/opencost-helm-chart opencost 2.5.34), release opencost in namespace
+# svp-obs, wave 8 of argocd/apps/components.json: the hourly cost of the CPU and memory each container is allocated,
+# from node prices and the metrics of Prometheus, as metrics on port 9003. Here the Prometheus of kube-prometheus-stack
+# and OpenCost's default prices; platform eks: AMP and AWS's public price list. Design notes: docs/components.md.
+
+# Wave 8, after the services: OpenCost is not Ready until it reaches Prometheus, which takes the NetworkPolicies of
+# svp-observability and, on eks, its Pod Identity. The root waits on each wave, so in an earlier one a cluster missing
+# either would deploy no service, for a component no page alert reads.
+
+# The exporter's image stays the chart's, already pinned by digest there, so it moves with the chart's version.
+
+# One replica: no page alert reads its metrics, and a restart reads Prometheus again. The cost is seen in Grafana and on
+# the API; no UI, no MCP server.
+opencost:
+  ui:
+    enabled: false
+  mcp:
+    enabled: false
+  exporter:
+    defaultClusterId: svp-k3d
+    # The request covers the pod at rest on a lab cluster; the price file is parsed as a stream and only the node types
+    # in the cluster are kept, so memory grows with the containers, not with the file. The chart's limit stays.
+    resources:
+      requests: {cpu: 10m, memory: 256Mi}
+      limits: {memory: 1Gi}
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    # Where it writes on a read-only root: its pricing and cloud configuration (CONFIG_PATH), and temporary files.
+    extraVolumeMounts:
+      - {name: configs, mountPath: /var/configs}
+      - {name: tmp, mountPath: /tmp}
+  prometheus:
+    internal:
+      serviceName: kps-prometheus
+      namespaceName: svp-obs
+      port: 9090
+  # No bill to reconcile with: a cluster lives for a session, while cost exports arrive a day later.
+  cloudCost:
+    enabled: false
+  metrics:
+    # kube-state-metrics of kube-prometheus-stack already exports these series under their v2 names.
+    kubeStateMetrics:
+      emitKsmV1Metrics: false
+    # Prometheus (agent on eks) scrapes port 9003. honorLabels, the chart's default, keeps OpenCost's namespace, pod
+    # and container labels over those of the target.
+    serviceMonitor:
+      enabled: true
+  # Platform eks only (amp.enabled there): the sidecar that signs the queries to AMP with SigV4. Pinned here, as
+  # Renovate reads base/ alone; the chart's default is a latest tag.
+  sigV4Proxy:
+    image: public.ecr.aws/aws-observability/aws-sigv4-proxy:1.13.1@sha256:d9e62d98e8a1fc8ba8859f491a5792f9134c453a38cc4f529145149eb255bfb9
+
+# Pod Security "restricted": the chart sets no security context. The image runs as user 1001.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+podLabels:
+  # It reads nodes, pods and the other objects it prices through the API server: allow-kube-api of chart svp-cluster
+  # opens that egress for this label only.
+  svp-kube-api: allow
+extraVolumes:
+  - {name: configs, emptyDir: {}}
+  - {name: tmp, emptyDir: {}}

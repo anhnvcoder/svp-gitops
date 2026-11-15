@@ -1,0 +1,50 @@
+# blackbox exporter v0.29.1 (chart https://prometheus-community.github.io/helm-charts prometheus-blackbox-exporter
+# 11.21.3), release blackbox-exporter-public in namespace svp-obs, wave 4 of argocd/apps/components.json, platform eks
+# only: probes of the public domain the way users come (public DNS, CloudFront, ALB, Envoy) and DNS probes of its names.
+# Names to resolve: platforms/eks/blackbox-exporter-public.values.tpl. Design notes: docs/components.md.
+
+# Service blackbox-exporter on 9115 on both platforms, which the Probes and the policies of svp-observability name.
+fullnameOverride: blackbox-exporter
+
+# By digest, the chart's appVersion beside it; the same pin as base/blackbox-exporter.yaml.
+image:
+  registry: quay.io
+  repository: prometheus/blackbox-exporter
+  tag: v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+
+# Two replicas over the zones, one down at a time: a probe is never lost to a drain or one zone.
+replicas: 2
+podDisruptionBudget:
+  maxUnavailable: 1
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus-blackbox-exporter
+        app.kubernetes.io/instance: blackbox-exporter-public
+
+# Pod Security "restricted": the chart's container settings and the seccomp profile they leave out.
+securityContext:
+  seccompProfile:
+    type: RuntimeDefault
+# Not measured yet: a few probes every 30 s.
+resources:
+  requests: {cpu: 10m, memory: 32Mi}
+  limits: {memory: 128Mi}
+
+# HTTPS verified against the system CAs, as a browser does. Only 200 counts, without following redirects; IPv4, where
+# the exporter's default is IPv6.
+config:
+  modules:
+    http_public:
+      prober: http
+      timeout: 5s
+      http:
+        preferred_ip_protocol: ip4
+        valid_status_codes: [200]
+        follow_redirects: false
+        fail_if_not_ssl: true
+        headers:
+          User-Agent: svp-uptime-probe

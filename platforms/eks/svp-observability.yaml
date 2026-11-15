@@ -21,3 +21,11 @@ dashboards:
 # Prometheus runs in agent mode (platforms/eks/kube-prometheus-stack.yaml): the operator's pods of a PrometheusAgent.
 pods:
   prometheus: {app.kubernetes.io/name: prometheus-agent, app.kubernetes.io/instance: kps-prometheus}
+# The uptime probes go to the public domain through CloudFront (egress to the internet on 443); their URLs come from
+# svp-observability.values.tpl. OpenCost queries the AMP workspace through its SigV4 proxy and downloads AWS's public
+# price list.
+probes:
+  egress: internet
+opencost:
+  query: amp
+  publicPricing: true
