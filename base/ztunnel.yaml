@@ -1,0 +1,20 @@
+# Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts ztunnel 1.32.0), release ztunnel in namespace
+# istio-system, wave 4 of argocd/apps/components.json: the per-node proxy that carries every connection of the mesh
+# over mTLS (HBONE) and enforces L4 policies. Root with NET_ADMIN, SYS_ADMIN: only Pod Security privileged admits it.
+# Values of k3d, platforms/eks/ztunnel.yaml the differences on EKS. Design notes: docs/components.md.
+
+profile: ambient
+global:
+  # Sets only the CNI paths of k3s in this chart; kept equal to istiod's and istio-cni's, as Istio's install asks.
+  platform: k3d
+
+image: docker.io/istio/ztunnel:1.32.0-distroless@sha256:953a77fc17379301de4b7c6697b1668471c9c1f6ff912c9c5b78f454ab362180
+
+# Requests of the chart's demo profile (files/profile-demo.yaml) for a lab cluster, not its 512 MiB sized for about
+# 200k pods; the limit catches a leak.
+resources:
+  requests:
+    cpu: 10m
+    memory: 40Mi
+  limits:
+    memory: 256Mi

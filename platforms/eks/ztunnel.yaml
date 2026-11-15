@@ -1,0 +1,11 @@
+# Platform eks: no platform profile, as istiod's and istio-cni's on EKS; the chart's own requests. Every connection
+# of the node's pods in the mesh goes through ztunnel: the limit equals the request, its memory never overcommitted.
+# Design notes: docs/components.md.
+global:
+  platform: ""
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 512Mi

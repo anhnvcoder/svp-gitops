@@ -441,6 +441,50 @@
       "groupName": "prometheus-blackbox-exporter chart"
     },
     {
+      "description": "Istio: the four charts and the images their values pin are one release of one version, so the whole mesh moves in one pull request.",
+      "matchFileNames": [
+        "base/istio-base.yaml",
+        "base/istiod.yaml",
+        "base/istio-cni.yaml",
+        "base/ztunnel.yaml"
+      ],
+      "groupName": "istio"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json"
+      ],
+      "matchDatasources": [
+        "helm"
+      ],
+      "matchDepNames": [
+        "base",
+        "istiod",
+        "cni",
+        "ztunnel"
+      ],
+      "groupName": "istio"
+    },
+    {
+      "matchFileNames": [
+        "argocd/apps/components.json",
+        "base/istio-base.yaml",
+        "base/istiod.yaml",
+        "base/istio-cni.yaml",
+        "base/ztunnel.yaml"
+      ],
+      "matchDepNames": [
+        "base",
+        "istiod",
+        "cni",
+        "ztunnel",
+        "docker.io/istio/**"
+      ],
+      "prBodyNotes": [
+        "Istio changed: read the upgrade notes of the new version (https://istio.io/latest/news/releases/) and check that its Kubernetes range still holds the EKS minor of the infrastructure repository. Before merging, run make drill-k8s-mesh in the code repository on a cluster made from this branch (SVP_GITOPS_DIR)."
+      ]
+    },
+    {
       "matchFileNames": [
         "base/argo-cd.yaml"
       ],

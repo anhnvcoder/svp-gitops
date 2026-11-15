@@ -10,3 +10,10 @@ env:
 # svp-cluster, mounted at /etc/svp-ca as the chart's localCA. Kafka is Amazon MSK, whose certificate chains to a public
 # CA among the system's roots.
 localCA: rds-ca
+# Only on Karpenter's nodes, which start tainted until Istio's CNI agent runs there, so no pod starts outside the mesh;
+# the system node group, which has no such taint, takes none of them.
+nodeAffinity:
+  requiredDuringSchedulingIgnoredDuringExecution:
+    nodeSelectorTerms:
+      - matchExpressions:
+          - {key: karpenter.sh/nodepool, operator: Exists}

@@ -1,0 +1,9 @@
+# Platform eks: no platform profile of the chart fits EKS, whose VPC CNI uses the chart's default paths (/etc/cni/net.d,
+# /opt/cni/bin); the chart's own requests, under the base's limit.
+# Design notes: docs/components.md.
+global:
+  platform: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
