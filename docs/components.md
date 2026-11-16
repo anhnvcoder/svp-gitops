@@ -1000,6 +1000,12 @@ vào đó qua API của AMG: CR `Grafana` ngoài trỏ `cluster.grafanaUrl`, tok
 `svp/<env>/grafana-operator`; `externalSecrets.grafanaOperator` của `svp-cluster.values.tpl` bật nó). Token của service account AMG hết hạn
 nhanh, nên script buổi tạo token mới mỗi buổi.
 
+- **Env không AMG** (`cluster.grafanaUrl` là `""`): root chart bỏ Application `grafana-operator`,
+  `svp-observability.values.tpl` chọn `dashboards.target: none` (không dashboard, data source hay egress tới Grafana),
+  `svp-cluster.values.tpl` tắt `externalSecrets.grafanaOperator` (không ExternalSecret chờ entry không có). Bỏ hẳn
+  thay vì để operator chạy không việc: nó vẫn tốn một pod, CRD và Role mà không làm gì; cảnh báo vẫn đi AMP tới SNS.
+  Env đó cần bản chart `svp-observability` có đích `none`.
+
 - **Quyền hẹp**: `namespaceScope` và Role ở `svp-obs` thay ClusterRole mặc định (đọc, ghi Secret và ConfigMap mọi namespace); pod đạt Pod
   Security `restricted`.
 - **Dashboard**: cùng JSON như k3d, mỗi cái một `GrafanaDashboard` (`dashboards.target: grafana-operator`); chart bỏ hai panel có data source
@@ -1186,7 +1192,7 @@ flowchart LR
   agent -- "remote write, SigV4" --> amp
   ack["ACK prometheusservice"] -- "RuleGroupsNamespace, AlertManagerDefinition" --> amp
   amp -- "page, ticket" --> sns["SNS svp-env-alarms"]
-  go["Grafana Operator"] -- "data source, dashboard" --> amg["Managed Grafana"]
+  go["Grafana Operator (env có AMG)"] -- "data source, dashboard" --> amg["Managed Grafana"]
   amg -- "query" --> amp
   amg -- "Logs Insights" --> cwl
   roll["argo-rollouts"] -- "canary query, SigV4" --> amp

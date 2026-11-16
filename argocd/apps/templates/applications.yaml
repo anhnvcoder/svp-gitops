@@ -213,14 +213,14 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
   "ampWorkspaceId" "^ws-[0-9a-f-]+$"
   "ampEndpoint" (printf "^https://aps-workspaces\\.%s\\.amazonaws\\.com/workspaces/ws-[0-9a-f-]+/$" $awsRegion)
   "logGroup" "^/svp/[a-z]+/otel$"
-  "grafanaUrl" (printf "^https://g-[0-9a-z]+\\.grafana-workspace\\.%s\\.amazonaws\\.com$" $awsRegion)
+  "grafanaUrl" (printf "^(https://g-[0-9a-z]+\\.grafana-workspace\\.%s\\.amazonaws\\.com)?$" $awsRegion)
   "alarmTopicArn" (printf "^arn:aws:sns:%s:[0-9]{12}:svp-[a-z]+-alarms$" $awsRegion)
   "mediaconvertQueueArn" (printf "^arn:aws:mediaconvert:%s:[0-9]{12}:queues/svp-[a-z]+$" $awsRegion)
   "mediaconvertRoleArn" "^arn:aws:iam::[0-9]{12}:role/svp-[a-z]+-mediaconvert$"
   "transcodeEventsQueueUrl" (printf "^https://sqs\\.%s\\.amazonaws\\.com/[0-9]{12}/svp-[a-z]+-transcode-events$" $awsRegion) }}
 {{- range $key := keys $shapes | sortAlpha }}
 {{- $value := get $cluster $key }}
-{{- if not (and (kindIs "string" $value) (regexMatch (get $shapes $key) $value)) }}
+{{- if not (and (hasKey $cluster $key) (kindIs "string" $value) (regexMatch (get $shapes $key) $value)) }}
 {{- fail (printf "cluster.%s is %q: want a value of the form %s, from output cluster_values of the infrastructure repository (the bootstrap sets cluster for platform %s)" $key (toString ($value | default "")) (get $shapes $key) $platform) }}
 {{- end }}
 {{- end }}
@@ -246,6 +246,11 @@ this repository renders with (deploy/ci/cluster-values.example.yaml of the code 
 {{- if not (and (kindIs "string" $arn) (regexMatch "^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]+$" $arn)) }}
 {{- fail (printf "cluster.externalSecretsRoles.%s is %q: want the ARN of an IAM role, arn:aws:iam::<account>:role/<name>" $ns (toString ($arn | default ""))) }}
 {{- end }}
+{{- end }}
+{{- /* grafanaUrl "": the env has no Managed Grafana, so no Grafana Operator. Left out rather than run idle: an operator
+with nothing to reconcile still runs a pod with its CRDs and a Role, and a missing Application holds no wave back. */}}
+{{- if eq (get $cluster "grafanaUrl") "" }}
+{{- $_ := unset $runs "grafana-operator" }}
 {{- end }}
 {{- end }}
 {{- $platformObjects := dict }}

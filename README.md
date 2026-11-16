@@ -142,7 +142,9 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   chart không đọc khoá này; check của repo code đọc nó (thiếu hay sai dạng là đỏ), job `diff-preview` cũng render theo nó.
 - Trường `platforms` của component trong `components.json`: danh sách nền tảng component chạy; vắng là mọi nền tảng. Chỉ `k3d`:
   `cloudnative-pg`, `plugin-barman-cloud` (Postgres trên EKS là RDS), `loki`, `tempo` (log, trace trên EKS vào CloudWatch Logs, X-Ray), `blackbox-exporter` (probe qua Envoy của cluster). Chỉ
-  `eks`: `blackbox-exporter-public` (probe domain công khai), `ack-prometheusservice` (luật và cảnh báo lên AMP), `grafana-operator` (dashboard lên Amazon Managed Grafana), `karpenter` (node cho workload theo pod đang chờ, wave -1
+  `eks`: `blackbox-exporter-public` (probe domain công khai), `ack-prometheusservice` (luật và cảnh báo lên AMP),
+  `grafana-operator` (dashboard lên Amazon Managed Grafana; không có ở env có `cluster.grafanaUrl` rỗng),
+  `karpenter` (node cho workload theo pod đang chờ, wave -1
   vì mang CRD của NodePool mà `svp-cluster` render), `aws-load-balancer-controller` (đăng ký pod Envoy vào target group của ALB internal
   qua TargetGroupBinding, wave 1 vì mang CRD của TargetGroupBinding mà `svp-cluster` render). Đường dev (`make k8s-up`) chạy component của
   `k3d`. Không gì trong cluster ghi DNS: bản ghi của env do Terraform của repo hạ tầng tạo.
@@ -174,7 +176,8 @@ và ở Amazon EKS (`eks`); prd chỉ chạy trên `eks`. Khác biệt giữa ha
   và `svp-ops` tới MSK, ElastiCache theo cùng CIDR), image qua ECR của account (`svp-policy.values.tpl`: policy `svp-registry-mirror` đổi
   image của mọi pod, `svp-images` đọc chữ ký ở ECR, Kyverno đăng nhập bằng Pod Identity), telemetry vào dịch vụ managed của account
   (Prometheus chế độ agent ghi vào AMP, Collector gửi log tới CloudWatch Logs và trace tới X-Ray bằng file đích `k8s-eks.yaml`, luật và
-  cảnh báo lên AMP qua ACK rồi tới SNS, dashboard lên Amazon Managed Grafana qua Grafana Operator, canary hỏi AMP bằng SigV4; sơ đồ ở
+  cảnh báo lên AMP qua ACK rồi tới SNS, dashboard lên Amazon Managed Grafana qua Grafana Operator khi env có AMG,
+  canary hỏi AMP bằng SigV4; sơ đồ ở
   [`docs/components.md`](docs/components.md#telemetry-trên-eks)), NetworkPolicy tới endpoint interface trong VPC (`awsEndpointCidrs` là
   `cluster.vpcCidr`), Argo CD tự cài như `base/` cộng ApplicationSet controller và Argo CD Notifications (`argo-cd.yaml`, ADR-0032 của repo code): chỉ root
   `svp-root` (nhãn `svp.io/notify=root` do bootstrap gắn) ghi commit status `argocd/<env>` lên commit của repo này bằng GitHub App
@@ -216,7 +219,7 @@ render nền tảng `eks` bằng fixture `deploy/ci/cluster-values.example.yaml`
 | `ampWorkspaceId` | `ws-…` | `rules.amp.workspaceId` của `svp-observability` (workspace mà ACK ghi luật vào), `amp.workspaceId` của `opencost` (eks) |
 | `ampEndpoint` | `https://aps-workspaces.<region>.amazonaws.com/workspaces/ws-…/`, có `/` cuối | URL remote write của `kube-prometheus-stack` (cộng `api/v1/remote_write`), `SVP_OTELCOL_AMP_ENDPOINT` của `otel-collector`, `dashboards.grafana.ampEndpoint` của `svp-observability`, `address` của `canaryPrometheus` (`gateway`, `web`; bỏ `/` cuối) |
 | `logGroup` | `/svp/<env>/otel` | `SVP_OTELCOL_LOG_GROUP` của `otel-collector` |
-| `grafanaUrl` | `https://g-….grafana-workspace.<region>.amazonaws.com`, không `/` cuối | `dashboards.grafana.url` của `svp-observability` (CR `Grafana` của Grafana Operator) |
+| `grafanaUrl` | `https://g-….grafana-workspace.<region>.amazonaws.com`, không `/` cuối; `""` khi env không có Managed Grafana | `dashboards.grafana.url` của `svp-observability` (CR `Grafana` của Grafana Operator); `""` chọn `dashboards.target: none`, `externalSecrets.grafanaOperator: false` của `svp-cluster` và bỏ component `grafana-operator` |
 | `alarmTopicArn` | ARN topic SNS `svp-<env>-alarms` | `rules.amp.alarmTopicArn` của `svp-observability` (đích của `AlertManagerDefinition`) |
 | `mediaconvertQueueArn` | ARN queue MediaConvert `svp-<env>` (`arn:aws:mediaconvert:<region>:<account>:queues/svp-<env>`) | `MEDIACONVERT_QUEUE_ARN` của `media-worker` |
 | `mediaconvertRoleArn` | ARN role IAM `svp-<env>-mediaconvert` (role MediaConvert dùng đọc, ghi S3) | `MEDIACONVERT_ROLE_ARN` của `media-worker` |

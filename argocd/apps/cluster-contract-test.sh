@@ -73,6 +73,36 @@ else
   fail=1
 fi
 
+# grafanaUrl in both forms of the contract: the example's URL sends the dashboards to that Managed Grafana through
+# Grafana Operator and its token; "" (an env without Managed Grafana) renders no Application grafana-operator, no
+# dashboards target that needs a Grafana and no ExternalSecret for the token, which no entry would ever fill.
+for form in url empty; do
+  if [ "$form" = url ]; then
+    filter=. want=$(jq -c '["grafana-operator", "grafana-operator", .grafanaUrl, true]' "$tmp/cluster.json")
+  else
+    filter='.cluster.grafanaUrl = ""' want='["none","",false]'
+  fi
+  name=grafana-$form
+  if render "$name" "$filter"; then
+    got=$(to_json "$tmp/$name.yaml" | jq -c '[.[] | select(.kind == "Application")] as $apps
+      | ($apps | map(.metadata.name | select(. == "grafana-operator")))
+      + ($apps | map(select(.metadata.name == "svp-observability") | .spec.sources[0].helm.valuesObject.dashboards
+        | .target, .grafana.url))
+      + ($apps | map(select(.metadata.name == "svp-cluster")
+        | .spec.sources[0].helm.valuesObject.externalSecrets.grafanaOperator))')
+    if [ "$got" = "$want" ]; then
+      echo "ok    $name: grafana-operator Application, dashboards target and url, token ExternalSecret $got"
+    else
+      echo "FAIL  $name: got $got, want $want"
+      fail=1
+    fi
+  else
+    sed 's/^/    /' "$tmp/$name.err"
+    echo "FAIL  $name: grafanaUrl of this form does not render"
+    fail=1
+  fi
+done
+
 # Each key: missing, a number instead of a string, and a string of another form. The render must fail on that key.
 keys="ecrRegistry ampWorkspaceId ampEndpoint logGroup grafanaUrl alarmTopicArn mediaconvertQueueArn mediaconvertRoleArn
   transcodeEventsQueueUrl"

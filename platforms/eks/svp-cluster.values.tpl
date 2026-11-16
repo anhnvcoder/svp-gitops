@@ -51,8 +51,8 @@ envoy:
 externalSecrets:
   prefix: {{ printf "svp/%s/" .Values.env | quote }}
   # Secret svp-obs/grafana-operator: the API token of Amazon Managed Grafana, which the session's bootstrap writes to
-  # entry grafana-operator.
-  grafanaOperator: true
+  # entry grafana-operator; none without a Managed Grafana, where no such entry exists to wait for.
+  grafanaOperator: {{ ne $c.grafanaUrl "" | toJson }}
   # The RDS instance's own address, the host of every connection string the ExternalSecrets build: sslmode=verify-full
   # checks the server's certificate against the host called, and RDS's certificate holds only that name.
   postgres: {{ printf "%s:5432" $c.rdsAddress | quote }}
