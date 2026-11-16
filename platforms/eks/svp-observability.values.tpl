@@ -16,8 +16,10 @@ rules:
     workspaceId: {{ .Values.cluster.ampWorkspaceId | quote }}
     alarmTopicArn: {{ .Values.cluster.alarmTopicArn | quote }}
     region: {{ .Values.cluster.region | quote }}
-# The managed Grafana Grafana Operator writes the dashboards to, and the workspace its data source reads.
+# The managed Grafana Grafana Operator writes the dashboards to, and the workspace its data source reads; none where
+# the env has no Managed Grafana (grafanaUrl "").
 dashboards:
+  target: {{ ternary "none" "grafana-operator" (eq .Values.cluster.grafanaUrl "") | quote }}
   grafana:
     url: {{ .Values.cluster.grafanaUrl | quote }}
     ampEndpoint: {{ .Values.cluster.ampEndpoint | quote }}
