@@ -1205,7 +1205,8 @@ flowchart LR
   `aws/spans`); xem ở CloudWatch và qua Logs Insights của AMG.
 - **Luật và cảnh báo**: luật của chart (`svp-alerts`, `slo-generated`) thành `RuleGroupsNamespace` trên workspace; `AlertManagerDefinition` gửi
   cảnh báo `page` và `ticket` tới topic SNS của env, giữ `runbook_url` và `severity`. Nhóm luật upstream của `kube-prometheus-stack` không
-  chuyển lên AMP.
+  chuyển lên AMP. Mọi nhóm chạy theo chu kỳ `rules.amp.interval` của chart: prd không có overlay nên chạy mặc định
+  15 s; `envs/stg/svp-observability.yaml` đặt 30 s, vì quota mặc định của AMP ở account stg không cho chu kỳ dưới 30 s.
 - **Credential**: mỗi thứ một EKS Pod Identity theo ServiceAccount: `otel-collector`, `kps-prometheus`, `ack-prometheusservice-controller`,
   `argo-rollouts`; không khoá tĩnh. Pod gọi API AWS qua endpoint interface trong VPC nhờ `awsEndpointCidrs` của NetworkPolicy (eks đặt
   `cluster.vpcCidr`; mặc định rỗng thì render như cũ).
