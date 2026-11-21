@@ -11,7 +11,7 @@ help: ## List the targets
 # network, repository read-only: a link that leaves it (to plans/, which is no repository's) is an error on purpose.
 # DOCS narrows the files; the default is every Markdown file git tracks plus untracked ones. Both tools always run.
 # renovate: datasource=docker depName=davidanson/markdownlint-cli2
-MARKDOWNLINT_IMAGE := davidanson/markdownlint-cli2:v0.24.0@sha256:70ead7c0352d22d04bbe612cd96b54ec591538d8f4626cafe391bb2ecf3639ca
+MARKDOWNLINT_IMAGE := davidanson/markdownlint-cli2:v0.24.1@sha256:caf0698eaea0268bcf35b5e2d7ba946b5899d323e765bc2862054405658cd948
 # renovate: datasource=docker depName=lycheeverse/lychee
 LYCHEE_IMAGE := lycheeverse/lychee:0.24.2@sha256:e2d19e57cf6ab037026f20b8e449a1f30d9d7f81eef4194763aab2eab20bd28d
 # set -f keeps the globs of DOCS whole: the tools expand them (with **), sh does not and would drop the files at the top.
