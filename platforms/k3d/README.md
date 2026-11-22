@@ -1,9 +1,16 @@
 # Nền tảng `k3d`
 
+> **Tóm tắt**
+>
+> - **Trả lời:** nền tảng `k3d` (cluster lab chạy trên máy và trên runner) khác `base/` ở đâu: nguồn Secret, component chỉ của k3d,
+>   telemetry và TLS ở lại trong cluster.
+> - **Vì sao:** cluster k3d chạy values gốc của `base/`; khác biệt duy nhất là nguồn Secret, kèm vài component chỉ chạy ở k3d.
+> - **Đọc tiếp:** mục "Lớp nền tảng" của [`README.md`](../../README.md#lớp-nền-tảng); phía EKS ở `platforms/eks/`.
+
 Cluster lab: cluster GitOps mà `deploy/k8s/gitops.sh` của repo code dựng (vai stg trên máy, trên runner của `verify.yml`). Cluster k3d chạy
 values gốc của `base/`; khác biệt duy nhất ở đây là nguồn Secret: `svp-cluster.yaml` bật External Secrets với store `kubernetes`, đọc Secret
 nguồn ở namespace `svp-secrets` mà `deploy/k8s/secrets.sh` của repo code ghi từ `.env` (trên `eks` là AWS Secrets Manager). Component chỉ của
-k3d: `cloudnative-pg`, `plugin-barman-cloud`, `loki`, `tempo` (trường `platforms` của `components.json`).
+k3d: `cloudnative-pg`, `plugin-barman-cloud`, `loki`, `tempo`, `blackbox-exporter` (trường `platforms` của `components.json`).
 
 Telemetry ở lại trong cluster như compose: Collector gửi metric, log, trace tới Prometheus, Loki, Tempo (`collector.destinations` mặc định
 của chart `svp-observability`), luật chạy ở Prometheus, cảnh báo qua Alertmanager, dashboard ở Grafana của `kube-prometheus-stack`. Trên

@@ -1,5 +1,12 @@
 # Thành phần của GitOps
 
+> **Tóm tắt**
+>
+> - **Trả lời:** từng thành phần ở `base/`, `platforms/`, `envs/`, `argocd/` có cấu hình nào đáng chú ý, và vì sao.
+> - **Vì sao:** values chỉ ghi giá trị; lý do một giá trị (chặn lỗi gì, đổi cho nền tảng nào) nằm ở mục của thành phần đó.
+> - **Đọc tiếp:** [`README.md`](../README.md) cho cấu trúc repo, root hai tầng, hợp đồng giá trị `cluster`, promote, check;
+>   `argocd/apps/components.json` cho danh sách thành phần, wave, nền tảng.
+
 Trang giải thích cấu hình đáng chú ý của từng thành phần ở `base/`, `platforms/`, `envs/` và `argocd/`, và lý do của nó. Danh sách
 thành phần, wave và nền tảng mỗi thành phần chạy nằm ở `argocd/apps/components.json`; cấu trúc repo, root hai tầng, lớp nền tảng, hợp đồng giá trị
 `cluster`, promote và check nằm ở [`README.md`](../README.md). Các mục xếp theo thứ tự: Argo CD và root của nó, rồi các thành phần theo wave.
