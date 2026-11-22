@@ -1,5 +1,14 @@
 # svp-gitops
 
+> **Tóm tắt**
+>
+> - **Trả lời:** repo giữ gì (values Helm gốc, khác biệt của từng env và nền tảng, bản phát hành, manifest Argo CD), root hai tầng dựng
+>   cluster từ đó ra sao, ai duyệt gì, promote stg rồi prd, check `gitops-ok`.
+> - **Vì sao:** Argo CD của mỗi cluster chỉ đọc repo này, nên cái gì chạy ở stg, prd chỉ đổi được qua pull request vào đây.
+> - **Làm gì:** đổi cấu hình thì mở PR và chờ `gitops-ok` xanh; bản phát hành do bot promote ghi, không sửa tay; sửa `.md` thì chạy
+>   `make docs-check` trước.
+> - **Đọc tiếp:** [Cấu trúc](#cấu-trúc), rồi [`docs/components.md`](docs/components.md): cấu hình đáng chú ý của từng thành phần.
+
 Cấu hình triển khai của nền tảng video ngắn: values Helm, bản phát hành của từng môi trường và manifest Argo CD, do Argo CD của mỗi cluster đọc.
 
 ## Mục lục
