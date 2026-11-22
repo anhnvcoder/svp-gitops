@@ -269,10 +269,9 @@ cùng bảng này, fixture của repo code, bảng hợp đồng của ADR-0034.
   có commit status `argocd/stg` trạng thái `success` (Argo CD Notifications của stg ghi khi mọi Application Healthy ở commit đó), nên prd chỉ
   nhận bộ stg đã đồng bộ xong. Cổng vào prd còn hai lượt duyệt: người học duyệt environment `promote-prd` của `svp-backend` (admin không bypass,
   trước khi job lấy khoá App), rồi người học (Code Owner) duyệt PR prd ở đây. Không có promote prd theo từng service.
+  `envs/prd/` chỉ đổi qua promote prd.
 - **Rollback prd:** dispatch promote prd với `stg_ref` là một commit cũ hơn trên `main` có `argocd/stg` `success` (attestation `vuln` quá 48 giờ
   thì rescan trước); PR đặt lại cả `gitopsRevision`, nên `base/`, `platforms/` cũng về bản của commit đó.
-- **Ngoại lệ khởi tạo:** ở commit đầu, `envs/prd/images/` và `envs/prd/charts.yaml` là đúng bộ của `envs/stg/` (bảy bản phát hành
-  build ở `6ca2d8a795dd`, chart ở commit `main` của repo code lúc tách). Sau đó `envs/prd/` đổi bằng promote prd.
 
 ## Check
 
