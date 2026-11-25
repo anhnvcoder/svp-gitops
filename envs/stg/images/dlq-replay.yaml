@@ -5,4 +5,4 @@
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/dlq-replay
   tag: "2b29ed044a92"
-  digest: "sha256:6da4cb862aa7d81bacbc88692aa610c73cd50ba6a51664faaa8c6fa3271eae3e"
+  digest: "sha256:b4f2f8c780ad28a21bae892804b938d0dc508ae1b7b7c5881abc5f4312a90bdc"

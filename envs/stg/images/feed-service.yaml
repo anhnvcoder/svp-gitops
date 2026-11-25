@@ -5,4 +5,4 @@
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/feed-service
   tag: "2b29ed044a92"
-  digest: "sha256:cbbdf575f328d457df698afa38c68d94f27e312594196f5d02b158f06bd0582a"
+  digest: "sha256:3a0bf1f72457b50b283a406c8cf40ab042a685015e3428a258ffc3b2b061852c"

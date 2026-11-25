@@ -5,4 +5,4 @@
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/media-worker
   tag: "2b29ed044a92"
-  digest: "sha256:490f9b44b22319ac2aab5d6f762ad0e4e64ad7597b26c0a0f9f5cdf0b619db8c"
+  digest: "sha256:4c2918c5256541b7c3aa120a324f24abb01ad8daf373a2ee7359a998fc459761"

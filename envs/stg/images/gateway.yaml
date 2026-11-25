@@ -5,4 +5,4 @@
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/gateway
   tag: "2b29ed044a92"
-  digest: "sha256:62889ee0bb2c456574d373912a8edb64cbda76abb556d5ba360fa68c65be327e"
+  digest: "sha256:7098bf9dad4ae70273eb79cc6a64d081419271fb587e71b6a30fe2bfe76e1ee9"
