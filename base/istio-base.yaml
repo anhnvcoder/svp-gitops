@@ -1,6 +1,6 @@
 # Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts base 1.32.0), release istio-base in namespace
-# istio-system, wave 2 of argocd/apps/components.json: the CRDs of the mesh and the webhook that validates their
-# objects, no pod. Its CRDs exist before istiod (wave 3) and the mesh policies of chart svp-service (wave 7).
+# istio-system, wave 1 of argocd/apps/components.json: the CRDs of the mesh and the webhook that validates their
+# objects, no pod. Its CRDs exist before the mesh policies of chart svp-service (wave 7).
 # Design notes: docs/components.md.
 
 base:

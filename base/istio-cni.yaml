@@ -1,5 +1,5 @@
 # Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts cni 1.32.0), release istio-cni in namespace
-# istio-system, wave 4 of argocd/apps/components.json: the node agent that sends the traffic of every pod of the mesh
+# istio-system, wave 1 of argocd/apps/components.json: the node agent that sends the traffic of every pod of the mesh
 # to ztunnel in the pod's network namespace. Root with NET_ADMIN, SYS_ADMIN: only Pod Security privileged admits it.
 # Values of k3d, platforms/eks/istio-cni.yaml the differences on EKS. Design notes: docs/components.md.
 

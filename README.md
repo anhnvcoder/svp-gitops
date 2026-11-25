@@ -393,7 +393,7 @@ không token:
 
 ```sh
 env -u DOCKER_DEFAULT_PLATFORM docker run --rm --user "$(id -u):$(id -g)" --env=ZIZMOR_OFFLINE=true --network=none \
-  -v "$PWD:/src:ro" --workdir /src "$(sed -n 's/^  ZIZMOR_IMAGE: //p' .github/workflows/check.yml)" \
+  -v "${PWD}:/src:ro" --workdir /src "$(sed -n 's/^  ZIZMOR_IMAGE: //p' .github/workflows/check.yml)" \
   --persona=regular --no-progress --color=never --cache-dir /tmp/zizmor .
 ```
 

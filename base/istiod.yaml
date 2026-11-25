@@ -1,7 +1,7 @@
 # Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts istiod 1.32.0), release istiod in namespace
-# istio-system, wave 3 of argocd/apps/components.json: the control plane of the ambient mesh (certificates of the
-# workloads, xDS of ztunnel and of the waypoint, the waypoint's Deployment from Gateway waypoint of chart svp-cluster).
-# Values of k3d; platforms/eks/istiod.yaml holds what differs on EKS. Design notes: docs/components.md.
+# istio-system, wave 1 of argocd/apps/components.json: the ambient mesh's control plane (workload certificates, xDS
+# of ztunnel and the waypoint), and what lifts the startup taint of the Karpenter nodes that chart svp-cluster, same
+# wave, waits on. Values of k3d; platforms/eks/istiod.yaml the differences on EKS. Design notes: docs/components.md.
 
 profile: ambient
 global:

@@ -390,8 +390,8 @@ spec:
     {{- if eq (int .wave) 0 }}
     # Pod Security "restricted" on the namespace of a component of wave 0 (cert-manager, envoy-gateway-system,
     # external-secrets) from its chart's first pod on: Argo CD creates the namespace with these labels in phase PreSync
-    # and sets them again at every sync. Chart svp-cluster labels the namespaces of every later wave, but comes after
-    # these charts, whose CRDs it needs. The same labels as svp-cluster's.
+    # and sets them again at every sync. Chart svp-cluster labels the namespaces of later waves and Istio's, but comes
+    # after these charts, whose CRDs it needs. The same labels as svp-cluster's.
     managedNamespaceMetadata:
       labels:
         pod-security.kubernetes.io/enforce: restricted
@@ -409,9 +409,10 @@ spec:
         {{- end }}
     {{- end }}
     syncOptions:
-      # A namespace no earlier wave made: wave 0's (with the labels above). Chart svp-cluster (wave 1) makes the
-      # project's and the later platform charts' namespaces, which this then leaves alone (Argo CD only touches an
-      # existing namespace when managedNamespaceMetadata is set).
+      # A namespace no earlier wave made: wave 0's (with the labels above), or istio-system when an Istio chart syncs
+      # before chart svp-cluster of the same wave, which then labels it. svp-cluster (wave 1) makes the project's and
+      # the later platform charts' namespaces, which this leaves alone (Argo CD only touches an existing namespace when
+      # managedNamespaceMetadata is set).
       - CreateNamespace=true
       # Several CRDs (Envoy Gateway's httproutes, KEDA's scaledjobs, CloudNativePG's clusters) exceed the 262144-byte
       # annotation client-side apply needs.

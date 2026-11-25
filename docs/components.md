@@ -309,8 +309,8 @@ nó từ git trong vài giây, release không vào được trong lúc đó.
 
 Namespace của component wave 0 (`cert-manager`, `envoy-gateway-system`, `external-secrets`) nhận Pod Security `restricted` từ pod đầu tiên
 của chart: Argo CD tạo namespace với các nhãn này (`CreateNamespace` ở dưới) ở phase PreSync, trước mọi object của chart trong đó, hook
-kể cả, và đặt lại chúng ở mỗi sync. Chart `svp-cluster` gắn nhãn cho namespace của mọi wave sau, nhưng đến sau các chart này, cái mà nó
-cần CRD. Cùng nhãn như của `svp-cluster`.
+kể cả, và đặt lại chúng ở mỗi sync. Chart `svp-cluster` gắn nhãn cho namespace của mọi wave sau và của Istio (cùng
+wave 1), nhưng đến sau các chart này, cái mà nó cần CRD. Cùng nhãn như của `svp-cluster`.
 
 ### Readiness gate của Envoy trên EKS
 
@@ -767,8 +767,9 @@ kết quả chữ ký tốn 1, một kết quả attestation tốn 1 cộng số
 
 Istio ambient (bốn chart của `https://blob.istio.io/istio-release/charts`, một version cho cả bốn và mọi image) là
 service mesh của namespace `svp`: mTLS giữa mọi pod, quyền theo ServiceAccount, cân tải và canary gRPC theo request. Cả
-bốn release ở namespace `istio-system`, chạy ở cả hai nền tảng (đường dev và đường GitOps cài cùng thứ); wave của từng
-cái ở `argocd/apps/components.json`:
+bốn release ở namespace `istio-system`, chạy ở cả hai nền tảng (đường dev và đường GitOps cài cùng thứ), cả bốn ở wave 1
+của `argocd/apps/components.json`, cùng chart `svp-cluster` (mục [Wave 1, cùng
+`svp-cluster`](#wave-1-cùng-svp-cluster)):
 
 - `istio-base` (chart `base`): CRD của mesh và webhook kiểm object của chúng, không pod. CRD có trước policy mesh của
   chart `svp-service`.
@@ -778,12 +779,42 @@ cái ở `argocd/apps/components.json`:
   pod.
 - `ztunnel` (chart `ztunnel`): proxy mỗi node mang mọi kết nối của mesh qua mTLS (HBONE) và thực thi policy L4.
 
-`istio-system` do chart `svp-cluster` (wave 1) tạo với Pod Security `privileged`: ztunnel và istio-cni chạy root với
+`istio-system` mang Pod Security `privileged` do chart `svp-cluster` gắn: ztunnel và istio-cni chạy root với
 `NET_ADMIN`, `SYS_ADMIN` và hostPath của node, không mức nào khác nhận. Pod `istiod` không cần quyền đó: chart đã drop
 ALL capability và chạy non-root, `seccompProfile: RuntimeDefault` ở `base/istiod.yaml` bổ sung phần còn thiếu để pod đạt
 `restricted` (istiod giữ khoá CA của mesh). Namespace `svp-mesh` chỉ giữ waypoint; cả hai
 nằm trong đích của AppProject `svp`. Thiết kế mesh và lý do ở
 [ADR-0075](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0075-service-mesh.md) của repo code.
+
+### Wave 1, cùng `svp-cluster`
+
+Trên EKS `svp-cluster` chỉ Healthy khi mesh đã chạy trên node Karpenter, nên Istio không thể ở wave sau nó:
+
+1. Gateway `svp` của `svp-cluster` chỉ `Programmed` khi pod Envoy của nó chạy, và pod Envoy chỉ lên node Karpenter
+   (`envoy.nodeAffinity` ở `platforms/eks/svp-cluster.yaml`).
+2. Node Karpenter đăng ký với startup taint `cni.istio.io/not-ready` (NodePool `default` của `svp-cluster`); istiod chỉ
+   gỡ taint khi istio-cni và ztunnel đã Ready trên node (`taint.enabled` ở mục [Values](#values)).
+3. Root chỉ sang wave kế khi mọi Application của wave này Healthy. Istio ở wave sau thì chờ chính `svp-cluster`: pod
+   Envoy Pending mãi, Gateway `Programmed=False` (`NoResources`), root không bao giờ xong.
+
+Cùng wave, Argo CD sync bốn release song song với `svp-cluster`, và istiod gỡ taint trong lúc `svp-cluster` còn chờ
+Gateway. Lý do chọn cách này thay vì tách Gateway sang Application ở wave sau hay bỏ health của Gateway `svp`:
+[ADR-0083](https://github.com/anhnvcoder/svp-backend/blob/main/docs/adr/0083-istio-wave-eks.md) của repo code.
+
+Trong một wave Argo CD không xếp thứ tự giữa các Application, nên mọi thứ tự đều phải dựng được:
+
+- Namespace `istio-system`: Application Istio sync trước `svp-cluster` thì `CreateNamespace` tạo namespace không nhãn,
+  theo Pod Security mặc định của cluster, rồi `svp-cluster` gắn `privileged`. Mặc định của EKS là `privileged`, pod lên
+  ngay. Mặc định của k3d là `restricted` (`deploy/k8s/pod-security-admission.yaml` của repo code): pod istio-cni,
+  ztunnel bị từ chối tới khi có nhãn, rồi DaemonSet controller tạo lại chúng. `svp-cluster` sync trước thì namespace đã
+  có nhãn, Argo CD để nguyên.
+- CRD của `istio-base`: render của `istiod`, `istio-cni`, `ztunnel` chỉ có kind lõi (Deployment, DaemonSet, ConfigMap,
+  RBAC, webhook), không object nào cần CRD của mesh, nên sync của chúng không chờ `istio-base`; sync lỗi thoáng qua có
+  `retry` của Application. Webhook kiểm object Istio (`Fail`) từ chối object Istio khi istiod chưa chạy; wave 1 không
+  render object nào như vậy, policy mesh ở chart `svp-service` (wave 7).
+- Đường dev (`make k8s-up`) cài `svp-cluster` trước bốn release trong wave 1 (`needs` ở
+  `deploy/k8s/helmfile.yaml.gotmpl` của repo code): Helm ở đường đó không tạo namespace, `istio-system` đến từ
+  `svp-cluster`.
 
 ### Values
 
@@ -1212,8 +1243,8 @@ flowchart LR
   `aws/spans`); xem ở CloudWatch và qua Logs Insights của AMG.
 - **Luật và cảnh báo**: luật của chart (`svp-alerts`, `slo-generated`) thành `RuleGroupsNamespace` trên workspace; `AlertManagerDefinition` gửi
   cảnh báo `page` và `ticket` tới topic SNS của env, giữ `runbook_url` và `severity`. Nhóm luật upstream của `kube-prometheus-stack` không
-  chuyển lên AMP. Mọi nhóm chạy theo chu kỳ `rules.amp.interval` của chart: prd không có overlay nên chạy mặc định
-  15 s; `envs/stg/svp-observability.yaml` đặt 30 s, vì quota mặc định của AMP ở account stg không cho chu kỳ dưới 30 s.
+  chuyển lên AMP. Mọi nhóm chạy theo chu kỳ `rules.amp.interval` của chart (mặc định 15 s cho k3d); `envs/stg/svp-observability.yaml` và
+  `envs/prd/svp-observability.yaml` đặt 30 s, vì quota mặc định của AMP không cho chu kỳ dưới 30 s.
 - **Credential**: mỗi thứ một EKS Pod Identity theo ServiceAccount: `otel-collector`, `kps-prometheus`, `ack-prometheusservice-controller`,
   `argo-rollouts`; không khoá tĩnh. Pod gọi API AWS qua endpoint interface trong VPC nhờ `awsEndpointCidrs` của NetworkPolicy (eks đặt
   `cluster.vpcCidr`; mặc định rỗng thì render như cũ).
