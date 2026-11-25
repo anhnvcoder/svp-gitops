@@ -1,5 +1,5 @@
 # Istio 1.32.0 (chart https://blob.istio.io/istio-release/charts ztunnel 1.32.0), release ztunnel in namespace
-# istio-system, wave 4 of argocd/apps/components.json: the per-node proxy that carries every connection of the mesh
+# istio-system, wave 1 of argocd/apps/components.json: the per-node proxy that carries every connection of the mesh
 # over mTLS (HBONE) and enforces L4 policies. Root with NET_ADMIN, SYS_ADMIN: only Pod Security privileged admits it.
 # Values of k3d, platforms/eks/ztunnel.yaml the differences on EKS. Design notes: docs/components.md.
 

@@ -126,7 +126,7 @@
     {
       "name": "istio-base",
       "namespace": "istio-system",
-      "wave": 2,
+      "wave": 1,
       "repo": "https://blob.istio.io/istio-release/charts",
       "chart": "base",
       "version": "1.32.0",
@@ -219,7 +219,7 @@
     {
       "name": "istiod",
       "namespace": "istio-system",
-      "wave": 3,
+      "wave": 1,
       "repo": "https://blob.istio.io/istio-release/charts",
       "chart": "istiod",
       "version": "1.32.0",
@@ -234,7 +234,7 @@
     {
       "name": "istio-cni",
       "namespace": "istio-system",
-      "wave": 4,
+      "wave": 1,
       "repo": "https://blob.istio.io/istio-release/charts",
       "chart": "cni",
       "version": "1.32.0",
@@ -243,7 +243,7 @@
     {
       "name": "ztunnel",
       "namespace": "istio-system",
-      "wave": 4,
+      "wave": 1,
       "repo": "https://blob.istio.io/istio-release/charts",
       "chart": "ztunnel",
       "version": "1.32.0",

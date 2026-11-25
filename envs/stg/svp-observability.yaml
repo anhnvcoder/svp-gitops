@@ -1,6 +1,6 @@
-# Staging's AMP rule groups run every 30 s, not the chart's 15 s that production keeps: the default AMP quota of the
-# staging account allows no interval below 30 s, and ACK cannot create a RuleGroupsNamespace that asks for less. Drop
-# this file once staging's quota allows 15 s. On k3d rules.target is prometheus, so the chart does not read the value.
+# Staging runs its AMP rule groups every 30 s, not the chart's 15 s: the default AMP quota allows no interval below
+# 30 s, and ACK cannot create a RuleGroupsNamespace that asks for less. Drop this file, with the one of prd, when the
+# chart's default becomes 30 s. On k3d rules.target is prometheus, so the chart does not read the value.
 rules:
   amp:
     interval: "30s"

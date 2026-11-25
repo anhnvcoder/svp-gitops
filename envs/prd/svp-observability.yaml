@@ -1,0 +1,6 @@
+# Production runs its AMP rule groups every 30 s, like staging: the default AMP quota allows no interval below 30 s, and
+# ACK cannot create a RuleGroupsNamespace that asks for less. Drop both overlays when the chart's default becomes 30 s.
+# On k3d rules.target is prometheus, so the chart does not read the value.
+rules:
+  amp:
+    interval: "30s"
