@@ -5,4 +5,4 @@
 image:
   repository: ghcr.io/anhnvcoder/svp-backend/engagement-service
   tag: "2b29ed044a92"
-  digest: "sha256:c9fa2acc5b92ceb87bb9223ea64ca003b24a8c22ec87240c8ca3b0215fb7fc81"
+  digest: "sha256:db894e58583b09f078f28c815268e8cec19dad1dc75bbfa8d90e19868ee50c96"
